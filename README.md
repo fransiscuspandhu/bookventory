@@ -19,10 +19,26 @@ Dirancang khusus untuk penjual multi-channel (Shopee, TikTok Shop, Tokopedia, da
 3. [**Estimasi Biaya Infrastruktur, API & Operasional (Cost Breakdown)**](./docs/03-cost-estimation.md)
    * Setup khusus Anda (VPS sendiri + OpenClaw/Hermes + Gemini Pro = **Rp 0 biaya tambahan/bln**)
    * Simulasi biaya bulanan untuk **Skala MVP / Bootstrap**, **Production Single-Company**, dan **SaaS Multi-Tenant**
-4. [**Panduan Instalasi & Konfigurasi VPS (Bookventory + OpenClaw / Hermes + Gemini)**](./docs/04-installation-and-setup-guide.md)
-   * Langkah instalasi Docker, PostgreSQL, Node.js 22, dan aplikasi Bookventory di VPS Ubuntu
-   * Langkah instalasi & pairing WhatsApp (QR Scan) + Telegram Bot menggunakan **OpenClaw** (`openclaw`) atau **Hermes Agent** (`hermes`)
-   * Konfigurasi model **Gemini 2.5 Pro/Flash** dan integrasi *Custom Skill* Bookventory
+4. [**Panduan Preview via Docker & Instalasi VPS (Bookventory + OpenClaw / Hermes + Gemini)**](./docs/04-installation-and-setup-guide.md)
+   * **Bagian A:** Petunjuk *Quick Build & Preview* langsung menggunakan Docker (`docker compose up --build -d`) sejak Fase 1
+   * **Bagian B:** Langkah instalasi Production di VPS Ubuntu + pairing WhatsApp (QR Scan) & Telegram Bot menggunakan **OpenClaw** (`openclaw`) atau **Hermes Agent** (`hermes`) dengan model **Gemini 2.5 Pro/Flash**
+
+---
+
+## Quick Preview via Docker (Begitu Fase 1 Selesai)
+
+Setiap milestone selesai di-push ke repository ini, Anda dapat langsung mem-build dan mencoba preview website beserta database PostgreSQL & data simulasi (COA + transaksi contoh) melalui Docker:
+
+```bash
+git clone https://github.com/fransiscuspandhu/bookventory.git
+cd bookventory
+git pull origin main
+
+# Build & jalankan aplikasi + database PostgreSQL
+docker compose up --build -d
+
+# Buka di browser: http://localhost:3000
+```
 
 ---
 

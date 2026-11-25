@@ -22,19 +22,19 @@ Agar kita bisa langsung **melihat dan menguji coba (preview) tampilan website se
 
 | Tahapan | Masuk ke Fase | Fokus Utama |
 | :--- | :--- | :--- |
-| **1. Web App Preview & Core Accounting UI** | **Fase 1** (`Step 1.1 – 1.3`) | Fokus 100% membangun aplikasi Next.js (`Dashboard`, `Import`, `Antrian`, `Stok`, `Laporan`, `Performa Toko`) yang langsung bisa di-**preview di browser** menggunakan local database (SQLite / Local Postgres) tanpa perlu urus VPS dulu. |
+| **1. Web App Preview (Local & Docker) & Core Accounting UI** | **Fase 1** (`Step 1.1 – 1.4`) | Membangun aplikasi Next.js (`Dashboard`, `Import`, `Antrian`, `Stok`, `Laporan`, `Performa Toko`) lengkap dengan `Dockerfile` & `docker-compose.yml` sehingga **langsung bisa Anda build & preview dengan 1 perintah `docker compose up --build`** di laptop/mesin Anda. |
 | **2. Smart File Parser (Excel/CSV) & GDrive** | **Fase 2** (`Step 2.1 – 2.4`) | Upload & parsing file laporan Shopee/TikTok/Excel langsung di Web Preview hingga menjadi Draft Jurnal (lengkap dengan HPP & PPh 22). |
 | **3. Modul Stok Gudang (BOM) & Laporan Keuangan** | **Fase 3** (`Step 3.1 – 3.3`) | Menyelesaikan kalkulasi HPP otomatis, Neraca Seimbang, Laba Rugi, Arus Kas, Performa Toko, KPI, dan Forecast di Web Preview. |
-| **4. Setup VPS, Docker & Integrasi OpenClaw / Hermes + Gemini Pro** | **Fase 4** (`Step 4.1 – 4.3`) | Setelah website matang di preview: bangun fitur **AI Assistant**, deploy aplikasi & PostgreSQL ke **VPS Anda**, lalu install **OpenClaw / Hermes Agent** (scan QR WhatsApp, Telegram Bot, & Gemini Pro). |
+| **4. AI Assistant, Deploy Production VPS & OpenClaw / Hermes** | **Fase 4** (`Step 4.1 – 4.3`) | Setelah website matang di preview: bangun fitur **AI Assistant**, deploy ke **VPS Production Anda**, lalu install **OpenClaw / Hermes Agent** (scan QR WhatsApp, Telegram Bot, & Gemini Pro). |
 
 ---
 
-## Fase 1: Web UI Preview, Database Schema & Double-Entry Engine (Minggu 1–2)
+## Fase 1: Web UI Preview (Docker-Ready), Database Schema & Double-Entry Engine (Minggu 1–2)
 
-Tujuan Fase 1 adalah menghadirkan **Live Web Preview** dari seluruh halaman utama beserta fondasi akuntansi *double-entry* yang presisi (`Debit = Kredit`), Chart of Accounts (COA), halaman **Antrian Draft Jurnal**, dan **Dashboard Ringkasan**.
+Tujuan Fase 1 adalah menghadirkan **Live Web Preview** dari seluruh halaman utama yang bisa langsung dijalankan baik di *dev server* maupun di-build langsung via **Docker (`docker compose up --build`)**, lengkap dengan fondasi akuntansi *double-entry* (`Debit = Kredit`), Chart of Accounts (COA), halaman **Antrian Draft Jurnal**, dan **Dashboard Ringkasan**.
 
 ### Step 1.1: Project Scaffolding & Interactive Web UI Preview
-- [ ] Inisialisasi project **Next.js (App Router, TypeScript)** dengan **Tailwind CSS** dan **Shadcn UI** yang langsung berjalan di *development preview server*.
+- [ ] Inisialisasi project **Next.js (App Router, TypeScript, `output: 'standalone'`)** dengan **Tailwind CSS** dan **Shadcn UI**.
 - [ ] Konfigurasi `decimal.js` untuk seluruh operasi aritmatika keuangan di sisi aplikasi.
 - [ ] Membangun *App Shell* & Navigasi responsif (Mobile & Desktop) dengan tema warna hijau zamrud (*emerald green*) bersih sesuai video referensi agar bisa langsung di-preview:
   - Topbar: Drawer Menu, Judul Halaman, Quick Search, Tombol `+` (Quick Action), Notifikasi.
@@ -60,6 +60,10 @@ Tujuan Fase 1 adalah menghadirkan **Live Web Preview** dari seluruh halaman utam
 - [ ] Bangun UI `/antrian`:
   - Kartu status: `Menunggu (N)`, `Bermasalah (0)`, `Disetujui hari ini (N)`.
   - Kartu Draft Jurnal lengkap dengan badge `Menunggu`, `Marketplace / Stok / Iklan / AI`, tanggal, rincian baris `Debit` (hijau) dan `Kredit` (abu/merah), serta tombol **`✓ Setujui`**, **`Edit`**, dan **`✕ Tolak`**.
+
+### Step 1.4: Dockerization & One-Command Local Preview (`Dockerfile` & `docker-compose.yml`)
+- [ ] Buat multi-stage `Dockerfile` (Node 22 Alpine) dan `docker-compose.yml` (bundling `bookventory-web` + `postgres:16-alpine` + auto-migration & demo data seeding script saat container menyala).
+- [ ] Dengan begitu, setiap kali ada update fitur di Fase 1, 2, maupun 3, Anda cukup menjalankan **`docker compose up --build`** di komputer/server Anda dan langsung membuka `http://localhost:3000` untuk mengecek hasilnya.
 
 ---
 

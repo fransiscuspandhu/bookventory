@@ -1,10 +1,53 @@
-# 4. Panduan Instalasi & Konfigurasi VPS (Bookventory + OpenClaw / Hermes + Gemini)
+# 4. Panduan Preview via Docker & Instalasi VPS (Bookventory + OpenClaw / Hermes)
 
-Dokumen ini berisi panduan langkah demi langkah (*step-by-step installation guide*) untuk men-deploy **Bookventory Web App**, **PostgreSQL Database**, serta **OpenClaw** atau **Hermes Agent** (WhatsApp & Telegram Gateway dengan model **Google Gemini Pro/Flash**) di VPS Anda sendiri.
+Dokumen ini terbagi menjadi 2 bagian utama:
+1. **Quick Preview via Docker (Fase 1–3):** Petunjuk untuk langsung mem-build dan mengecek website Bookventory di laptop/mesin lokal Anda hanya dengan 1 perintah Docker.
+2. **Production VPS Deployment + OpenClaw / Hermes (Fase 4):** Panduan men-deploy aplikasi bersama AI Chat Gateway (WhatsApp & Telegram) di VPS Anda.
 
 ---
 
-## Arsitektur Deployment di VPS Anda
+## Bagian A: Quick Build & Preview Website via Docker (Sejak Fase 1)
+
+Sejak **Fase 1** selesai, repository ini dilengkapi dengan `Dockerfile`, `docker-compose.yml`, dan `docker-entrypoint.sh` (yang otomatis menjalankan migrasi database dan mengisi *seed data* COA + contoh transaksi Topherbal seperti di video referensi).
+
+### Petunjuk Menjalankan Preview via Docker:
+
+```bash
+# 1. Clone atau tarik update terbaru dari repository
+git clone https://github.com/fransiscuspandhu/bookventory.git
+cd bookventory
+git pull origin main
+
+# 2. Copy file environment contoh (opsional, docker-compose sudah memiliki nilai default untuk preview)
+cp .env.example .env
+
+# 3. Build image dan jalankan container (Web App + PostgreSQL 16)
+docker compose up --build -d
+
+# 4. Cek log untuk memastikan migrasi & seeding selesai
+docker compose logs -f web
+```
+
+### Cara Mengakses & Mengelola Container Preview:
+* **Buka Website Preview:** Akses **`http://localhost:3000`** di browser Anda.
+* **Rebuild Setelah `git pull` (Saat ada update kode baru):**
+  ```bash
+  git pull origin main
+  docker compose up --build -d
+  ```
+* **Reset Database Preview ke Data Awal (Fresh Seed):**
+  ```bash
+  docker compose down -v
+  docker compose up --build -d
+  ```
+* **Menghentikan Preview:**
+  ```bash
+  docker compose down
+  ```
+
+---
+
+## Bagian B: Arsitektur Deployment Production di VPS (Fase 4)
 
 Seluruh layanan berjalan di dalam 1 VPS yang sama sehingga komunikasi antar-layanan sangat cepat (`localhost` / internal Docker network) dan **Rp 0 biaya tambahan**:
 
