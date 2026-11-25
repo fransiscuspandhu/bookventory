@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bookventory-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bookventory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bookventory_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-bookventory_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bookventory} -d ${POSTGRES_DB:-bookventory_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bookventory-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bookventory}:${POSTGRES_PASSWORD:-bookventory_secret}@postgres:5432/${POSTGRES_DB:-bookventory_db}
+      AGENT_API_SECRET: ${AGENT_API_SECRET:-bv_secret_token_openclaw_hermes}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-pro}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
