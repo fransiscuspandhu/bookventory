@@ -18,17 +18,29 @@ import {
 } from "@/lib/accounting-data";
 
 export default function AntrianPage() {
-  const { journals, summary, approveJournal, rejectJournal } = useAccounting();
+  const {
+    activeCompany,
+    journals,
+    summary,
+    approveJournal,
+    rejectJournal,
+    selectedSourceFilter,
+    setSelectedSourceFilter,
+  } = useAccounting();
   const [activeTab, setActiveTab] = useState<"MENUNGGU" | "RIWAYAT">("MENUNGGU");
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
 
   const pendingJournals = journals.filter(
-    (j) => j.status === "MENUNGGU" || j.status === "BERMASALAH"
+    (j) =>
+      (j.status === "MENUNGGU" || j.status === "BERMASALAH") &&
+      (selectedSourceFilter === "ALL" || j.sourceChannel === selectedSourceFilter)
   );
   const historyJournals = journals.filter(
-    (j) => j.status === "DISETUJUI" || j.status === "DITOLAK"
+    (j) =>
+      (j.status === "DISETUJUI" || j.status === "DITOLAK") &&
+      (selectedSourceFilter === "ALL" || j.sourceChannel === selectedSourceFilter)
   );
 
   const displayedJournals =
@@ -72,6 +84,37 @@ export default function AntrianPage() {
         </div>
       )}
 
+      {/* Source Category Filter Pills */}
+      <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="font-bold text-slate-700">
+          Antrian Draft ({activeCompany.name}):
+        </span>
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          {(
+            [
+              { id: "ALL", label: "Semua Sumber (Overall)" },
+              { id: "TikTok", label: "TikTok" },
+              { id: "Shopee", label: "Shopee" },
+              { id: "Tokopedia", label: "Tokopedia" },
+              { id: "POS / Custom", label: "POS / Custom" },
+              { id: "Operasional", label: "Operasional & AI" },
+            ] as const
+          ).map((ch) => (
+            <button
+              key={ch.id}
+              onClick={() => setSelectedSourceFilter(ch.id)}
+              className={`px-2.5 py-1 rounded-lg font-semibold shrink-0 cursor-pointer ${
+                selectedSourceFilter === ch.id
+                  ? "bg-[#15803d] text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/70"
+              }`}
+            >
+              {ch.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Top Summary Cards matching video 0:16 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
         <div className="col-span-2 sm:col-span-1 bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs">
@@ -82,7 +125,7 @@ export default function AntrianPage() {
             Menunggu
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-0.5">
-            {summary.pendingCount}
+            {pendingJournals.length}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
             Draft menunggu persetujuan

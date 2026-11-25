@@ -40,9 +40,10 @@ Tujuan Fase 1 adalah menghadirkan **Live Web Preview** dari seluruh halaman utam
   - Topbar: Drawer Menu, Judul Halaman, Quick Search, Tombol `+` (Quick Action), Notifikasi.
   - Halaman utama: `Dashboard`, `Import`, `Antrian`, `Stok Gudang`, `Laporan`, `Performa Toko`, `Asisten AI`.
 
-### Step 1.2: Desain Database PostgreSQL & Chart of Accounts (COA)
-- [ ] Setup PostgreSQL + Prisma/Drizzle ORM dengan skema tabel inti:
-  1. `stores`: Menyimpan daftar toko (misal: `Topherbal Official - TikTok`, `topherbal.id - Shopee`), platform, dan *fingerprint rules*.
+### Step 1.2: Desain Database PostgreSQL, Multi-Company & Chart of Accounts (COA)
+- [ ] Setup PostgreSQL + ORM dengan dukungan **Multi-Company (1 Akun Login = Banyak Perusahaan)**:
+  0. `users` & `companies` (`user_companies`): 1 akun user dapat membuat, mengelola, dan berpindah antar banyak perusahaan (misal: `PT Topherbal Indonesia`, `CV Kopi Nusantara`, `PT Maju Fashion Retail`) dengan isolasi buku besar (`company_id`).
+  1. `stores`: Menyimpan daftar toko per perusahaan (`company_id`), platform (`TikTok`, `Shopee`, `Tokopedia`, `POS/Custom`), dan *fingerprint rules*.
   2. `accounts`: Menyimpan Chart of Accounts (COA) standar:
      - **11xx Kas & Bank / Wallet:** `1102 - BCA PT`, `1106 - Saldo Penjual TikTok`, `1109/1111 - Saldo Penjual Shopee`.
      - **12xx Piutang, Persediaan & Dibayar di Muka:** `1206 - Persediaan Barang Jadi`, `1209 - Saldo Iklan Dibayar Dimuka`, `1213 - Persediaan Bahan Baku`, `1214 - Persediaan Kemasan`, `1217 - Perlengkapan`, `1218 - PPh 22 Dibayar Dimuka`.
@@ -51,15 +52,15 @@ Tujuan Fase 1 adalah menghadirkan **Live Web Preview** dari seluruh halaman utam
      - **31xx Ekuitas / Modal:** `3101 - Modal Disetor`, `3104 - Laba/Rugi Periode Berjalan`.
      - **41xx–42xx Pendapatan:** `4112 - Penjualan Marketplace`, `4201 - Retur Penjualan`.
      - **51xx–58xx HPP & Beban:** `5101 - HPP Barang Jadi`, `5203 - Beban Fee & Promo Marketplace`, `5301 - Pemasaran Meta Ads`, `5308 - Beban Iklan Marketplace`, `5401 - Beban Gaji Karyawan`, `5803 - Pendapatan Lain: Kompensasi Marketplace`.
-  3. `journal_entries`: Header jurnal (`id`, `store_id`, `entry_date`, `source_type` [`MARKETPLACE`, `STOK`, `IKLAN`, `AI`], `status` [`DRAFT`, `APPROVED`, `REJECTED`], `title`, `reference_hash`, `total_amount`).
-  4. `journal_lines`: Baris debit/kredit (`journal_entry_id`, `account_id`, `debit`, `credit`, `memo`).
+  3. `journal_entries`: Header jurnal (`id`, `company_id`, `store_id`, `source_channel` [`TikTok`, `Shopee`, `Tokopedia`, `Custom/Operasional`], `entry_date`, `source_type` [`MARKETPLACE`, `STOK`, `IKLAN`, `AI`], `status` [`DRAFT`, `APPROVED`, `REJECTED`], `title`, `reference_hash`, `total_amount`).
+  4. `journal_lines`: Baris debit/kredit (`journal_entry_id`, `account_id`, `debit`, `credit`, `source_channel`, `memo`).
 
 ### Step 1.3: Core Double-Entry Validator & Approval Queue (`/antrian`)
 - [ ] Buat service `JournalEngine.createDraft()` dan `JournalEngine.approveDraft()`.
 - [ ] **Aturan Validasi Ketat:** Sebuah draft jurnal hanya bisa di-approve jika `SUM(debit) === SUM(credit)` dan nilainya `> 0`.
 - [ ] Bangun UI `/antrian`:
   - Kartu status: `Menunggu (N)`, `Bermasalah (0)`, `Disetujui hari ini (N)`.
-  - Kartu Draft Jurnal lengkap dengan badge `Menunggu`, `Marketplace / Stok / Iklan / AI`, tanggal, rincian baris `Debit` (hijau) dan `Kredit` (abu/merah), serta tombol **`✓ Setujui`**, **`Edit`**, dan **`✕ Tolak`**.
+  - Kartu Draft Jurnal lengkap dengan badge `Menunggu`, `Marketplace / Stok / Iklan / AI`, kategori sumber (`TikTok`, `Shopee`, dll), tanggal, rincian baris `Debit` (hijau) dan `Kredit` (abu/merah), serta tombol **`✓ Setujui`**, **`Edit`**, dan **`✕ Tolak`**.
 
 ### Step 1.4: Dockerization & One-Command Local Preview (`Dockerfile` & `docker-compose.yml`)
 - [ ] Buat multi-stage `Dockerfile` (Node 22 Alpine) dan `docker-compose.yml` (bundling `bookventory-web` + `postgres:16-alpine` + auto-migration & demo data seeding script saat container menyala).
@@ -67,22 +68,20 @@ Tujuan Fase 1 adalah menghadirkan **Live Web Preview** dari seluruh halaman utam
 
 ---
 
-## Fase 2: Smart Import Engine & Marketplace Parser (Minggu 3–4)
+## Fase 2: Smart Import Engine, Real Excel/CSV Parser & Google Drive Sync (Minggu 3–4)
 
-Tujuan Fase 2 adalah mengotomatiskan pembacaan file laporan Excel/CSV dari Shopee, TikTok Shop, Tokopedia, maupun Excel custom/Google Drive menjadi Draft Jurnal.
+Tujuan Fase 2 adalah mengotomatiskan pembacaan isi file laporan Excel/CSV asli dari Shopee, TikTok Shop, Tokopedia, maupun Excel custom/Google Drive menjadi Draft Jurnal yang terkelompok per kategori sumber data (`sourceChannel`).
 
-### Step 2.1: Multi-File Upload & Store Fingerprint Detector (`/import`)
-- [ ] Buat komponen Drag & Drop multi-file (`.csv`, `.xlsx`) di `/import`.
+### Step 2.1: Real Excel/CSV Reader (`SheetJS`) & Store Fingerprint Detector (`/import`)
+- [ ] Buat komponen Drag & Drop multi-file (`.csv`, `.xlsx`) di `/import` yang benar-benar membaca baris & kolom di dalam file menggunakan `xlsx` (`SheetJS`).
+- [ ] Sediakan fitur **Download Sample File Excel/CSV (TikTok Settlement, Shopee Income, & Custom POS Excel)** di halaman `/import` untuk memudahkan pengujian.
 - [ ] Bangun **File Fingerprint Engine**:
-  - Membaca struktur header dan metadata file untuk mendeteksi jenis laporan:
-    - TikTok Shop: `All_order_*.csv`, `Income_*.xlsx` (Settlement/Withdraw).
-    - Shopee: `Order.all.*.xlsx`, `Income.sudah_dilepas.*.xlsx`.
-  - Mendeteksi identitas toko dari pola nama file atau isi kolom SKU/Order ID.
-  - Menampilkan tabel **Pratinjau deteksi toko** dengan status warna (Hijau = dikenali, Kuning = pilih toko & pelajari sidik jari, Merah = konflik).
+  - Membaca struktur header dan metadata file untuk mendeteksi jenis laporan & kategori sumber data (`TikTok`, `Shopee`, `Tokopedia`, `Custom/POS`).
+  - Menampilkan tabel **Pratinjau deteksi toko & baris transaksi** dengan status warna (Hijau = dikenali, Kuning = pilih toko & pelajari sidik jari, Merah = konflik).
 - [ ] Sanitasi PII otomatis: Drop kolom Nama Pembeli, No HP, dan Alamat Pengiriman saat parsing berlangsung.
 
-### Step 2.2: Settlement-to-Journal Generator (Otomatisasi HPP & PPh 22)
-- [ ] Buat algoritma agregasi **Satu Draft Jurnal per Toko per Tanggal Cair (Settlement Date)**:
+### Step 2.2: Settlement-to-Journal Generator (Otomatisasi HPP, PPh 22 & Tagging Sumber Data)
+- [ ] Buat algoritma agregasi **Satu Draft Jurnal per Toko per Tanggal Cair (Settlement Date)** dari baris Excel yang di-upload:
   - Menghitung total Harga Jual Bruto -> `Kredit 4112`.
   - Menghitung total Retur -> `Debit 4201`.
   - Menghitung total Biaya Admin, Komisi, Layanan -> `Debit 5203`.
@@ -90,21 +89,21 @@ Tujuan Fase 2 adalah mengotomatiskan pembacaan file laporan Excel/CSV dari Shope
   - Mengekstrak potongan saldo iklan / kompensasi -> `Debit 1209` / `Kredit 5803`.
   - Menghitung dana bersih yang masuk ke saldo marketplace -> `Debit 1106 / 1109`.
   - Menghitung total kuantitas SKU terjual di settlement tersebut × HPP Produk -> `Debit 5101 (HPP)` & `Kredit 1206 (Persediaan Barang Jadi)`.
+  - Menyematkan tag **`sourceChannel` (`TikTok`, `Shopee`, `Tokopedia`, `Custom`)** pada setiap transaksi agar laporan keuangan bisa difilter per sumber data maupun *Overall*.
 - [ ] **Deteksi Selisih Rp 1 & Rekonsiliasi Iklan (GMV Max):**
   - Jika ada selisih pembulatan antara order dan settlement (walau hanya Rp 1 – Rp 4), buat draft jurnal `Selisih Settlement` secara otomatis.
 
-### Step 2.3: AI Fallback Parser (Untuk Excel Custom & Format Baru)
-- [ ] Jika user mengunggah file Excel penjualan custom (di luar format standar Shopee/TikTok), kirim 15 baris pertama ke **Gemini 2.5 Pro / Flash** menggunakan *Structured Output* untuk memetakan kolom secara dinamis ke struktur jurnal.
+### Step 2.3: AI Fallback Column Mapper (Untuk Excel Custom & Format Baru)
+- [ ] Jika user mengunggah file Excel penjualan custom (di luar format standar Shopee/TikTok), tampilkan **AI Column Mapping Preview** (mengenali kolom Tanggal, SKU, Qty, Omzet Bruto, Diskon/Fee, HPP, dan Pajak) sebelum digenerate menjadi Draft Jurnal.
 
-### Step 2.4: Integrasi Google Drive Sync
-- [ ] Integrasi **Google Drive API** (OAuth2 / Service Account).
-- [ ] Tambahkan tombol **"Ambil dari Google Drive"** atau **Watch Folder**: setiap ada file `.xlsx`/`.csv` baru di folder Google Drive yang ditunjuk, sistem otomatis menariknya ke halaman `/import`.
+### Step 2.4: Integrasi Google Drive Link / Watch Folder Sync
+- [ ] Tambahkan modal/input **"Tarik dari Google Drive / Google Sheets Link"** di `/import` untuk mengimpor file laporan langsung dari URL atau Watch Folder Google Drive.
 
 ---
 
-## Fase 3: Stok Gudang (BOM/Formula), Laporan Keuangan & Forecast (Minggu 5–6)
+## Fase 3: Stok Gudang (BOM/Formula), Laporan Multi-Source & Forecast (Minggu 5–6)
 
-Tujuan Fase 3 adalah memastikan nilai HPP dan Persediaan di Neraca selalu akurat secara *perpetual*, serta menyajikan laporan keuangan dan analisis *unit economics* per toko.
+Tujuan Fase 3 adalah memastikan nilai HPP dan Persediaan di Neraca selalu akurat secara *perpetual*, serta menyajikan laporan keuangan dengan **Breakdown Kategori Sumber Data (`Overall Semua Sumber` vs `TikTok` vs `Shopee` vs `Tokopedia/Custom`)**.
 
 ### Step 3.1: Modul Stok Gudang & Formula BOM (`/stok-gudang`)
 - [ ] Buat tabel `products` (tipe: `FINISHED_GOOD`, `RAW_MATERIAL`, `PACKAGING`), `product_formulas` (resep komposisi bahan baku & kemasan per 1 unit barang jadi), dan `inventory_transactions`.
@@ -116,11 +115,14 @@ Tujuan Fase 3 adalah memastikan nilai HPP dan Persediaan di Neraca selalu akurat
   - Hitung *daily burn rate* (rata-rata penjualan harian 14–30 hari terakhir).
   - Tampilkan peringatan item kritis (`±N hari Kritis`), identifikasi bahan baku pembatas (*bottleneck*), dan rekomendasi jumlah pesanan (`pesan sekarang ±X kg / pcs`).
 
-### Step 3.2: Laporan Keuangan Otomatis (`/laporan`)
+### Step 3.2: Laporan Keuangan Otomatis + Breakdown per Kategori Sumber Data (`/laporan`)
+- [ ] **Filter Kategori Sumber Data (Source Channel Filter):**
+  - User dapat melihat laporan dalam mode **`Semua Sumber (Overall)`** atau memfilter khusus per sumber data: **`TikTok Shop`**, **`Shopee`**, **`Tokopedia`**, atau **`POS / Custom / Operasional`**.
+  - Menyediakan **Tabel Perbandingan Antar Sumber Data (Source Channel Breakdown)** di Laporan Laba Rugi & Buku Besar yang merinci Omzet, Retur, Fee Marketplace, Iklan, **HPP**, **Pajak PPh 22**, dan **Laba Bersih** dari masing-masing platform beserta kolom **Total Overall**.
 - [ ] **Tab Neraca:** Agregasi saldo akun Aktiva vs Pasiva & Modal (Saldo Awal, Mutasi Berjalan, Saldo Akhir) + validator **`Seimbang ✓ (Aset = Liabilitas + Ekuitas)`**.
-- [ ] **Tab Laba Rugi:** Pendapatan bersih, Laba Kotor (setelah HPP), Beban di luar HPP, Laba Bersih.
+- [ ] **Tab Laba Rugi:** Pendapatan bersih, Laba Kotor (setelah HPP), Beban di luar HPP, Laba Bersih (Overall & per Source Data).
 - [ ] **Tab Arus Kas:** Metode langsung/tidak langsung (Operasi, Investasi, Pendanaan, Saldo Awal & Akhir).
-- [ ] **Tab Buku Besar & Ekspor:** Rincian mutasi per kode akun & ekspor ke Excel/PDF.
+- [ ] **Tab Buku Besar & Ekspor:** Rincian mutasi per kode akun (dengan filter kategori sumber data) & ekspor ke Excel/PDF.
 
 ### Step 3.3: Performa Toko, Cek KPI & Forecast (`/performa-toko` & `/laporan`)
 - [ ] **Halaman Performa Toko:**

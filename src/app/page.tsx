@@ -15,9 +15,10 @@ import {
   ListChecks,
   Upload,
   Sparkles,
+  Filter,
 } from "lucide-react";
 import { useAccounting } from "@/lib/accounting-context";
-import { formatIDR } from "@/lib/accounting-data";
+import { formatIDR, SourceChannel } from "@/lib/accounting-data";
 
 const DAILY_SALES_CHART = [
   { day: "1", val: 2.8 },
@@ -46,20 +47,35 @@ const DAILY_SALES_CHART = [
   { day: "24", val: 1.9 },
 ];
 
+const SOURCE_OPTIONS: { id: "ALL" | SourceChannel; label: string }[] = [
+  { id: "ALL", label: "Semua Sumber (Overall)" },
+  { id: "TikTok", label: "TikTok Shop" },
+  { id: "Shopee", label: "Shopee" },
+  { id: "Tokopedia", label: "Tokopedia" },
+  { id: "POS / Custom", label: "POS / Custom Excel" },
+];
+
 export default function DashboardPage() {
-  const { summary } = useAccounting();
+  const {
+    activeCompany,
+    summary,
+    selectedSourceFilter,
+    setSelectedSourceFilter,
+    sourceBreakdown,
+  } = useAccounting();
   const [selectedMonth, setSelectedMonth] = useState("Nov 2026");
 
   return (
     <div className="space-y-5">
-      {/* Header Row matching video 0:05 */}
+      {/* Header Row matching video 0:05 + Active Company Name */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base sm:text-lg font-bold text-slate-900">
-            Ringkasan posisi keuangan Topherbal
+            Ringkasan posisi keuangan {activeCompany.name}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Diperbarui otomatis dari jurnal · Status Neraca:{" "}
+            Diperbarui otomatis dari jurnal · NPWP {activeCompany.taxIdNpwp} ·
+            Status Neraca:{" "}
             <span className="text-emerald-700 font-semibold">
               {summary.isBalanced ? "Seimbang (Debit = Kredit)" : "Selisih"}
             </span>
@@ -79,6 +95,32 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Filter Kategori Sumber Data (Overall vs TikTok vs Shopee vs Tokopedia vs Custom) */}
+      <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+          <Filter className="w-3.5 h-3.5 text-[#15803d]" />
+          <span>Kategori Sumber Data:</span>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {SOURCE_OPTIONS.map((opt) => {
+            const isActive = selectedSourceFilter === opt.id;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => setSelectedSourceFilter(opt.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-[#15803d] text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200/70"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Quick Action Banner if Drafts are Pending */}
       {summary.pendingCount > 0 && (
         <div className="bg-emerald-900 text-white rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
@@ -89,9 +131,13 @@ export default function DashboardPage() {
             <div>
               <div className="text-sm font-semibold">
                 Ada {summary.pendingCount} Draft Jurnal menunggu persetujuan
+                {selectedSourceFilter !== "ALL"
+                  ? ` (Kategori: ${selectedSourceFilter})`
+                  : ""}
               </div>
               <div className="text-xs text-emerald-200">
-                Termasuk settlement TikTok & Shopee, PPh 22, HPP otomatis, dan input AI.
+                Termasuk settlement TikTok & Shopee, PPh 22, HPP otomatis, dan
+                input AI.
               </div>
             </div>
           </div>
@@ -114,9 +160,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 7 Financial Position Cards Grid matching video 0:05 and 1:21 */}
+      {/* 8 Financial Position Cards Grid matching video 0:05 and 1:21 */}
       <div className="grid grid-cols-2 gap-3.5 sm:gap-4">
-        {/* Card 1: Total Aset */}
         <Link
           href="/laporan"
           className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:border-emerald-600/40 transition-all"
@@ -125,7 +170,7 @@ export default function DashboardPage() {
             <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
               <Landmark className="w-4 h-4" />
             </span>
-            <span>Total Aset</span>
+            <span>Total Aset (Overall PT)</span>
           </div>
           <div className="text-base sm:text-xl font-bold text-slate-900 mt-3 tracking-tight">
             {formatIDR(summary.totalAssets)}
@@ -138,7 +183,6 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        {/* Card 2: Total Modal */}
         <Link
           href="/laporan"
           className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:border-emerald-600/40 transition-all"
@@ -147,7 +191,7 @@ export default function DashboardPage() {
             <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center">
               <Briefcase className="w-4 h-4" />
             </span>
-            <span>Total Modal</span>
+            <span>Total Modal (Overall PT)</span>
           </div>
           <div className="text-base sm:text-xl font-bold text-slate-900 mt-3 tracking-tight">
             {formatIDR(summary.totalEquity)}
@@ -160,7 +204,6 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        {/* Card 3: Total Utang */}
         <Link
           href="/laporan"
           className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:border-emerald-600/40 transition-all"
@@ -178,11 +221,10 @@ export default function DashboardPage() {
             <span>↑ 16,9%</span>
           </div>
           <div className="text-[11px] text-slate-400 mt-2 line-clamp-1">
-            Terbesar: Iklan TikTok (GMV Pay) Rp 2,8 jt
+            Terbesar: Iklan TikTok (GMV Pay)
           </div>
         </Link>
 
-        {/* Card 4: Dana di Marketplace */}
         <Link
           href="/performa-toko"
           className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:border-emerald-600/40 transition-all"
@@ -191,7 +233,12 @@ export default function DashboardPage() {
             <span className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center">
               <ShoppingBag className="w-4 h-4" />
             </span>
-            <span>Dana di Marketplace</span>
+            <span>
+              Dana di Marketplace{" "}
+              {selectedSourceFilter !== "ALL"
+                ? `(${selectedSourceFilter})`
+                : ""}
+            </span>
           </div>
           <div className="text-base sm:text-xl font-bold text-slate-900 mt-3 tracking-tight">
             {formatIDR(summary.marketplaceFunds)}
@@ -204,7 +251,6 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        {/* Card 5: Kas & Bank */}
         <Link
           href="/laporan"
           className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:border-emerald-600/40 transition-all"
@@ -226,7 +272,6 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        {/* Card 6: Penjualan Bersih */}
         <Link
           href="/laporan"
           className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:border-emerald-600/40 transition-all"
@@ -235,7 +280,12 @@ export default function DashboardPage() {
             <span className="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
               <TrendingUp className="w-4 h-4" />
             </span>
-            <span>Penjualan Bersih</span>
+            <span>
+              Penjualan Bersih{" "}
+              {selectedSourceFilter !== "ALL"
+                ? `(${selectedSourceFilter})`
+                : "(Overall)"}
+            </span>
           </div>
           <div className="text-base sm:text-xl font-bold text-slate-900 mt-3 tracking-tight">
             {formatIDR(summary.netSales)}
@@ -248,7 +298,6 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        {/* Card 7: Laba (Rugi) Bersih + HPP & PPh 22 Summary */}
         <Link
           href="/laporan"
           className="col-span-2 sm:col-span-1 bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:border-emerald-600/40 transition-all"
@@ -257,7 +306,12 @@ export default function DashboardPage() {
             <span className="w-7 h-7 rounded-lg bg-rose-50 text-rose-700 flex items-center justify-center">
               <ArrowUpRight className="w-4 h-4" />
             </span>
-            <span>Laba (Rugi) Bersih</span>
+            <span>
+              Laba (Rugi) Bersih{" "}
+              {selectedSourceFilter !== "ALL"
+                ? `(${selectedSourceFilter})`
+                : "(Overall)"}
+            </span>
           </div>
           <div className="text-base sm:text-xl font-bold text-slate-900 mt-3 tracking-tight">
             {formatIDR(summary.netIncome)}
@@ -266,13 +320,13 @@ export default function DashboardPage() {
             <span>↑ 42,8%</span>
           </div>
           <div className="text-[11px] text-slate-400 mt-2">
-            November 2026 · penjualan - HPP ({formatIDR(summary.totalHpp)}) - beban
+            November 2026 · penjualan - HPP ({formatIDR(summary.totalHpp)}) -
+            beban
           </div>
         </Link>
 
-        {/* Card 8: Ringkasan HPP & Kredit Pajak PPh 22 */}
         <Link
-          href="/asisten-ai"
+          href="/laporan"
           className="col-span-2 sm:col-span-1 bg-white rounded-2xl p-4 border border-emerald-200/80 shadow-2xs hover:border-emerald-600/50 transition-all flex flex-col justify-between"
         >
           <div>
@@ -281,7 +335,12 @@ export default function DashboardPage() {
                 <span className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
                   <Sparkles className="w-4 h-4" />
                 </span>
-                <span>HPP & Pajak PPh 22</span>
+                <span>
+                  HPP & Pajak PPh 22{" "}
+                  {selectedSourceFilter !== "ALL"
+                    ? `(${selectedSourceFilter})`
+                    : "(Overall)"}
+                </span>
               </div>
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
                 Otomatis
@@ -289,7 +348,7 @@ export default function DashboardPage() {
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div>
-                <div className="text-[11px] text-slate-500">HPP Bulan Ini</div>
+                <div className="text-[11px] text-slate-500">Total HPP</div>
                 <div className="text-sm font-bold text-slate-900">
                   {formatIDR(summary.totalHpp)}
                 </div>
@@ -303,9 +362,128 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="text-[11px] text-emerald-700 font-medium mt-2">
-            Tanya Asisten AI atau via WhatsApp/Telegram →
+            Lihat Breakdown Sumber Data di Laporan →
           </div>
         </Link>
+      </div>
+
+      {/* Ringkasan Kontribusi Per Kategori Sumber Data (TikTok vs Shopee vs Tokopedia vs Custom vs Overall) */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm sm:text-base font-bold text-slate-900">
+              Breakdown Per Kategori Sumber Data (Source Channel)
+            </h3>
+            <p className="text-xs text-slate-500">
+              Perbandingan Penjualan Bersih, HPP, Fee Marketplace, Pajak PPh 22,
+              dan Laba per sumber laporan vs Overall
+            </p>
+          </div>
+          <Link
+            href="/laporan"
+            className="text-xs font-semibold text-[#15803d] hover:underline"
+          >
+            Buka Laporan Lengkap →
+          </Link>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-400 uppercase text-[11px]">
+                <th className="py-2 pr-2">Sumber Data</th>
+                <th className="py-2 px-2 text-right">Order</th>
+                <th className="py-2 px-2 text-right">Penjualan Bersih</th>
+                <th className="py-2 px-2 text-right">HPP (5101)</th>
+                <th className="py-2 px-2 text-right">Fee & Iklan</th>
+                <th className="py-2 px-2 text-right">PPh 22 (1218)</th>
+                <th className="py-2 pl-2 text-right">Laba Bersih</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {sourceBreakdown.map((row) => (
+                <tr
+                  key={row.channel}
+                  onClick={() => setSelectedSourceFilter(row.channel)}
+                  className={`cursor-pointer transition-colors ${
+                    selectedSourceFilter === row.channel
+                      ? "bg-emerald-50/80 font-semibold"
+                      : "hover:bg-slate-50"
+                  }`}
+                >
+                  <td className="py-2.5 pr-2 font-bold text-slate-900">
+                    {row.channel}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono">
+                    {row.orderCount}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono">
+                    {formatIDR(row.netSales)}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono text-slate-700">
+                    {formatIDR(row.hpp)}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono text-slate-600">
+                    {formatIDR(
+                      row.marketplaceFee + row.adExpense + row.operatingExpense
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono text-amber-800 font-semibold">
+                    {formatIDR(row.pph22TaxCredit)}
+                  </td>
+                  <td
+                    className={`py-2.5 pl-2 text-right font-mono font-bold ${
+                      row.netProfit >= 0 ? "text-[#15803d]" : "text-rose-600"
+                    }`}
+                  >
+                    {formatIDR(row.netProfit)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr
+                onClick={() => setSelectedSourceFilter("ALL")}
+                className="border-t-2 border-slate-200 font-bold text-slate-900 bg-slate-50/80 cursor-pointer"
+              >
+                <td className="py-2.5 pr-2">OVERALL (SEMUA SUMBER)</td>
+                <td className="py-2.5 px-2 text-right font-mono">
+                  {sourceBreakdown.reduce((a, b) => a + b.orderCount, 0)}
+                </td>
+                <td className="py-2.5 px-2 text-right font-mono">
+                  {formatIDR(
+                    sourceBreakdown.reduce((a, b) => a + b.netSales, 0)
+                  )}
+                </td>
+                <td className="py-2.5 px-2 text-right font-mono">
+                  {formatIDR(sourceBreakdown.reduce((a, b) => a + b.hpp, 0))}
+                </td>
+                <td className="py-2.5 px-2 text-right font-mono">
+                  {formatIDR(
+                    sourceBreakdown.reduce(
+                      (a, b) =>
+                        a +
+                        b.marketplaceFee +
+                        b.adExpense +
+                        b.operatingExpense,
+                      0
+                    )
+                  )}
+                </td>
+                <td className="py-2.5 px-2 text-right font-mono text-amber-800">
+                  {formatIDR(
+                    sourceBreakdown.reduce((a, b) => a + b.pph22TaxCredit, 0)
+                  )}
+                </td>
+                <td className="py-2.5 pl-2 text-right font-mono text-[#15803d]">
+                  {formatIDR(
+                    sourceBreakdown.reduce((a, b) => a + b.netProfit, 0)
+                  )}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       {/* Penjualan Bulan Ini Bar Chart matching video 0:06 */}
@@ -313,15 +491,16 @@ export default function DashboardPage() {
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div>
             <div className="text-xs font-medium text-slate-500">
-              Penjualan Bulan Ini
+              Penjualan Bulan Ini{" "}
+              {selectedSourceFilter !== "ALL"
+                ? `(Sumber: ${selectedSourceFilter})`
+                : "(Overall Semua Sumber)"}
             </div>
             <div className="text-2xl font-bold text-slate-900 mt-1">
               {formatIDR(summary.netSales)}
             </div>
           </div>
-          <div className="text-xs text-slate-500">
-            Topherbal Official (TikTok) & topherbal.id (Shopee)
-          </div>
+          <div className="text-xs text-slate-500">{activeCompany.name}</div>
         </div>
 
         <div className="mt-6">

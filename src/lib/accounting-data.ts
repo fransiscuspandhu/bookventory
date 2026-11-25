@@ -3,6 +3,17 @@ import Decimal from "decimal.js";
 // Configure Decimal for strict financial rounding
 Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
 
+export type SourceChannel = "TikTok" | "Shopee" | "Tokopedia" | "POS / Custom" | "Operasional";
+
+export interface Company {
+  id: string;
+  name: string;
+  shortCode: string;
+  taxIdNpwp: string;
+  industry: string;
+  defaultTaxRatePercent: number;
+}
+
 export type AccountCategory =
   | "ASSET_CASH"
   | "ASSET_RECEIVABLE_INVENTORY"
@@ -23,15 +34,17 @@ export interface Account {
   category: AccountCategory;
   normalBalance: NormalBalance;
   openingBalance: number;
-  runningMutation: number; // Net change in current period (in normal balance direction)
+  runningMutation: number;
   closingBalance: number;
   storeTag?: string;
+  sourceChannel?: SourceChannel;
 }
 
 export interface Store {
   id: string;
+  companyId: string;
   name: string;
-  platform: "TikTok" | "Shopee" | "Tokopedia" | "Offline";
+  platform: "TikTok" | "Shopee" | "Tokopedia" | "POS / Custom";
   handle: string;
   fingerprintKeywords: string[];
   walletAccountCode: string;
@@ -42,6 +55,7 @@ export interface JournalLine {
   accountCode: string;
   accountName: string;
   storeTag?: string;
+  sourceChannel?: SourceChannel;
   debit: number;
   credit: number;
   memo?: string;
@@ -52,9 +66,11 @@ export type JournalStatus = "MENUNGGU" | "BERMASALAH" | "DISETUJUI" | "DITOLAK";
 
 export interface JournalEntry {
   id: string;
+  companyId?: string;
   title: string;
   entryDate: string; // YYYY-MM-DD
   sourceType: JournalSourceType;
+  sourceChannel?: SourceChannel;
   platformTag?: string;
   storeId?: string;
   storeName?: string;
@@ -68,14 +84,35 @@ export interface JournalEntry {
   errorReason?: string;
 }
 
+export interface ParsedExcelRow {
+  orderId: string;
+  settlementDate: string;
+  sku: string;
+  qty: number;
+  grossSales: number;
+  returnAmount: number;
+  marketplaceFee: number;
+  pph22Withheld: number;
+  adDeduction: number;
+  netSettlement: number;
+  hppPerUnit: number;
+  totalHpp: number;
+}
+
 export interface ImportBatch {
   id: string;
+  companyId?: string;
   fileName: string;
   fileSizeKB: number;
   storeId: string;
   storeName: string;
-  platform: "TikTok" | "Shopee" | "Custom";
-  reportType: "Semua pesanan" | "Income (sudah dilepas)" | "Order.all" | "Income";
+  platform: "TikTok" | "Shopee" | "Tokopedia" | "POS / Custom";
+  reportType:
+    | "Semua pesanan"
+    | "Income (sudah dilepas)"
+    | "Order.all"
+    | "Income"
+    | "Custom Sales Excel";
   periodStart: string;
   periodEnd: string;
   status: "RECOGNIZED" | "UNKNOWN_STORE" | "CONFLICT";
@@ -83,6 +120,11 @@ export interface ImportBatch {
   settlementCount: number;
   mutationCount: number;
   netDisbursed: number;
+  grossSalesTotal?: number;
+  feeTotal?: number;
+  pph22Total?: number;
+  hppTotal?: number;
+  parsedRows?: ParsedExcelRow[];
   saved: boolean;
   draftGenerated: boolean;
 }
@@ -107,9 +149,8 @@ export interface InventoryItem {
 export interface StorePerformanceMetrics {
   storeId: string;
   storeName: string;
-  platform: "TikTok" | "Shopee";
+  platform: "TikTok" | "Shopee" | "Tokopedia" | "POS / Custom";
   periodLabel: string;
-  // Tanggal Order
   orderCount: number;
   omzetOrder: number;
   cancelledCount: number;
@@ -117,7 +158,6 @@ export interface StorePerformanceMetrics {
   roas: number;
   acosPercent: number;
   unbilledAdDebt: number;
-  // Tanggal Cair
   settledSales: number;
   aov: number;
   netPerOrder: number;
@@ -126,6 +166,22 @@ export interface StorePerformanceMetrics {
   feePercent: number;
   hppTotal: number;
   contributionMargin: number;
+}
+
+export interface SourceChannelBreakdown {
+  channel: SourceChannel;
+  orderCount: number;
+  grossSales: number;
+  returns: number;
+  netSales: number;
+  hpp: number;
+  grossProfit: number;
+  marketplaceFee: number;
+  adExpense: number;
+  operatingExpense: number;
+  pph22TaxCredit: number;
+  netProfit: number;
+  walletBalance: number;
 }
 
 export function formatIDR(amount: number): string {
@@ -165,10 +221,45 @@ export function validateDoubleEntry(lines: JournalLine[]): {
   };
 }
 
-// Initial Seed Data matching the exact numbers & scenarios from the Topherbal Reference Video
+// Multi-Company Seed Data (1 User Login can manage multiple companies)
+export const INITIAL_COMPANIES: Company[] = [
+  {
+    id: "comp-topherbal",
+    name: "PT Topherbal Nusantara",
+    shortCode: "TH",
+    taxIdNpwp: "01.884.291.4-012.000",
+    industry: "Herbal & Kesehatan (TikTok & Shopee)",
+    defaultTaxRatePercent: 0.5,
+  },
+  {
+    id: "comp-kopi",
+    name: "CV Kopi Roastery Mandiri",
+    shortCode: "KR",
+    taxIdNpwp: "02.419.552.1-044.000",
+    industry: "F&B & Roastery (Shopee, Tokopedia & POS)",
+    defaultTaxRatePercent: 0.5,
+  },
+  {
+    id: "comp-fashion",
+    name: "PT Maju Apparel Retail",
+    shortCode: "MA",
+    taxIdNpwp: "03.911.008.7-061.000",
+    industry: "Fashion & Apparel (TikTok Shop & Shopee Mall)",
+    defaultTaxRatePercent: 11.0,
+  },
+];
+
+// Scale factor for companies so switching company shows realistic distinct ledgers
+export const COMPANY_SCALE_FACTORS: Record<string, number> = {
+  "comp-topherbal": 1.0,
+  "comp-kopi": 0.62,
+  "comp-fashion": 1.45,
+};
+
 export const INITIAL_STORES: Store[] = [
   {
     id: "store-tiktok-1",
+    companyId: "comp-topherbal",
     name: "Topherbal Official",
     platform: "TikTok",
     handle: "TopherbalOfficial",
@@ -177,6 +268,7 @@ export const INITIAL_STORES: Store[] = [
   },
   {
     id: "store-shopee-1",
+    companyId: "comp-topherbal",
     name: "topherbal.id",
     platform: "Shopee",
     handle: "topherbal.id",
@@ -184,25 +276,26 @@ export const INITIAL_STORES: Store[] = [
     walletAccountCode: "1109",
   },
   {
-    id: "store-shopee-2",
-    name: "jamuku.official",
-    platform: "Shopee",
-    handle: "jamuku.official",
-    fingerprintKeywords: ["jamuku.official"],
-    walletAccountCode: "1109",
+    id: "store-tokopedia-1",
+    companyId: "comp-topherbal",
+    name: "Topherbal Tokopedia Mall",
+    platform: "Tokopedia",
+    handle: "topherbal-tokopedia",
+    fingerprintKeywords: ["tokopedia", "topherbal-tokopedia"],
+    walletAccountCode: "1110",
   },
   {
-    id: "store-shopee-3",
-    name: "herbalsehat",
-    platform: "Shopee",
-    handle: "herbalsehat",
-    fingerprintKeywords: ["herbalsehat"],
-    walletAccountCode: "1111",
+    id: "store-pos-1",
+    companyId: "comp-topherbal",
+    name: "Penjualan Grosir / Custom Excel",
+    platform: "POS / Custom",
+    handle: "grosir-offline",
+    fingerprintKeywords: ["custom", "pos", "grosir"],
+    walletAccountCode: "1102",
   },
 ];
 
 export const INITIAL_ACCOUNTS: Account[] = [
-  // 11xx Kas & Bank + Wallet Marketplace
   {
     code: "1102",
     name: "BCA PT",
@@ -211,6 +304,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     openingBalance: 199014118,
     runningMutation: 57329982,
     closingBalance: 256344100,
+    sourceChannel: "Operasional",
   },
   {
     code: "1106",
@@ -221,6 +315,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     runningMutation: 776561,
     closingBalance: 2616561,
     storeTag: "Topherbal Official",
+    sourceChannel: "TikTok",
   },
   {
     code: "1109",
@@ -231,8 +326,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
     runningMutation: 609562,
     closingBalance: 1819562,
     storeTag: "topherbal.id",
+    sourceChannel: "Shopee",
   },
-  // 12xx Piutang, Persediaan & Dibayar di Muka
   {
     code: "1206",
     name: "Persediaan Barang Jadi",
@@ -250,6 +345,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     openingBalance: 125629,
     runningMutation: 71232,
     closingBalance: 196861,
+    sourceChannel: "Shopee",
   },
   {
     code: "1213",
@@ -287,7 +383,6 @@ export const INITIAL_ACCOUNTS: Account[] = [
     runningMutation: 272185,
     closingBalance: 912185,
   },
-  // 13xx Aset Tetap
   {
     code: "1301",
     name: "Peralatan",
@@ -297,7 +392,6 @@ export const INITIAL_ACCOUNTS: Account[] = [
     runningMutation: 0,
     closingBalance: 20050000,
   },
-  // 21xx Utang Jangka Pendek
   {
     code: "2112",
     name: "Utang Iklan TikTok (GMV Pay)",
@@ -306,8 +400,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
     openingBalance: 2375454,
     runningMutation: 401136,
     closingBalance: 2776590,
+    sourceChannel: "TikTok",
   },
-  // 31xx Modal & Ekuitas
   {
     code: "3101",
     name: "Modal Disetor - Pemegang Saham A",
@@ -335,7 +429,6 @@ export const INITIAL_ACCOUNTS: Account[] = [
     runningMutation: 49826678,
     closingBalance: 84715840,
   },
-  // 41xx - 42xx Pendapatan
   {
     code: "4112",
     name: "Penjualan Marketplace",
@@ -354,7 +447,6 @@ export const INITIAL_ACCOUNTS: Account[] = [
     runningMutation: 2342410,
     closingBalance: 3749237,
   },
-  // 51xx - 58xx HPP & Beban
   {
     code: "5101",
     name: "HPP Barang Jadi",
@@ -381,6 +473,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     openingBalance: 4500000,
     runningMutation: 5450000,
     closingBalance: 9950000,
+    sourceChannel: "Operasional",
   },
   {
     code: "5308",
@@ -399,6 +492,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     openingBalance: 7600000,
     runningMutation: 7600000,
     closingBalance: 15200000,
+    sourceChannel: "Operasional",
   },
   {
     code: "5803",
@@ -408,16 +502,99 @@ export const INITIAL_ACCOUNTS: Account[] = [
     openingBalance: 120000,
     runningMutation: 18032,
     closingBalance: 138032,
+    sourceChannel: "Shopee",
+  },
+];
+
+// Initial Source Channel Breakdown (TikTok, Shopee, Tokopedia, POS/Custom, Operasional)
+// Totals match the Overall Laba Rugi (Net Sales: Rp92.777.590, HPP: Rp15.013.838, Laba Kotor: Rp77.763.752, Beban: Rp27.937.074, Laba Bersih: Rp49.826.678)
+export const INITIAL_SOURCE_BREAKDOWN: SourceChannelBreakdown[] = [
+  {
+    channel: "TikTok",
+    orderCount: 742,
+    grossSales: 52450000,
+    returns: 1380000,
+    netSales: 51070000,
+    hpp: 8250000,
+    grossProfit: 42820000,
+    marketplaceFee: 6180000,
+    adExpense: 2280000,
+    operatingExpense: 0,
+    pph22TaxCredit: 512000,
+    netProfit: 34360000,
+    walletBalance: 2616561,
+  },
+  {
+    channel: "Shopee",
+    orderCount: 518,
+    grossSales: 35820000,
+    returns: 842410,
+    netSales: 34995622, // includes 18.032 kompensasi
+    hpp: 5683838,
+    grossProfit: 29311784,
+    marketplaceFee: 4614824,
+    adExpense: 1232250,
+    operatingExpense: 0,
+    pph22TaxCredit: 345185,
+    netProfit: 23464710,
+    walletBalance: 1819562,
+  },
+  {
+    channel: "Tokopedia",
+    orderCount: 68,
+    grossSales: 4650000,
+    returns: 120000,
+    netSales: 4530000,
+    hpp: 730000,
+    grossProfit: 3800000,
+    marketplaceFee: 580000,
+    adExpense: 0,
+    operatingExpense: 0,
+    pph22TaxCredit: 55000,
+    netProfit: 3220000,
+    walletBalance: 0,
+  },
+  {
+    channel: "POS / Custom",
+    orderCount: 24,
+    grossSales: 2200000,
+    returns: 0,
+    netSales: 2181968,
+    hpp: 350000,
+    grossProfit: 1831968,
+    marketplaceFee: 0,
+    adExpense: 0,
+    operatingExpense: 0,
+    pph22TaxCredit: 0,
+    netProfit: 1831968,
+    walletBalance: 0,
+  },
+  {
+    channel: "Operasional",
+    orderCount: 0,
+    grossSales: 0,
+    returns: 0,
+    netSales: 0,
+    hpp: 0,
+    grossProfit: 0,
+    marketplaceFee: 0,
+    adExpense: 5450000, // Meta Ads
+    operatingExpense: 7600000, // Gaji Karyawan
+    pph22TaxCredit: 0,
+    netProfit: -13050000,
+    walletBalance: 256344100, // BCA PT
   },
 ];
 
 export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
   {
     id: "draft-1",
+    companyId: "comp-topherbal",
     title: "Settlement TikTok Topherbal Official 2026-11-24: 18 order",
     entryDate: "2026-11-24",
     sourceType: "Marketplace",
-    platformTag: "Marketplace",
+    sourceChannel: "TikTok",
+    platformTag: "TikTok",
     storeId: "store-tiktok-1",
     storeName: "Topherbal Official",
     status: "MENUNGGU",
@@ -430,6 +607,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1206",
         accountName: "Persediaan Barang Jadi",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 0,
         credit: 233448,
       },
@@ -438,6 +616,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5101",
         accountName: "HPP Barang Jadi",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 233448,
         credit: 0,
       },
@@ -446,6 +625,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1106",
         accountName: "Saldo Penjual - TikTok Topherbal Official",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 1243273,
         credit: 0,
       },
@@ -454,6 +634,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1218",
         accountName: "PPh 22 Dibayar Dimuka",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 7108,
         credit: 0,
       },
@@ -462,6 +643,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "4112",
         accountName: "Penjualan Marketplace",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 0,
         credit: 1421578,
       },
@@ -470,6 +652,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5203",
         accountName: "Beban Fee & Promo Marketplace",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 171197,
         credit: 0,
       },
@@ -477,10 +660,12 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
   },
   {
     id: "draft-2",
+    companyId: "comp-topherbal",
     title: "Settlement Shopee topherbal.id 2026-11-22: 17 order, 1 penyesuaian",
     entryDate: "2026-11-22",
     sourceType: "Marketplace",
-    platformTag: "Marketplace",
+    sourceChannel: "Shopee",
+    platformTag: "Shopee",
     storeId: "store-shopee-1",
     storeName: "topherbal.id",
     status: "MENUNGGU",
@@ -494,6 +679,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1206",
         accountName: "Persediaan Barang Jadi",
         storeTag: "topherbal.id",
+        sourceChannel: "Shopee",
         debit: 0,
         credit: 209361,
       },
@@ -502,6 +688,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1209",
         accountName: "Saldo Iklan Dibayar Dimuka",
         storeTag: "topherbal.id",
+        sourceChannel: "Shopee",
         debit: 0,
         credit: 8791,
       },
@@ -510,6 +697,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5101",
         accountName: "HPP Barang Jadi",
         storeTag: "topherbal.id",
+        sourceChannel: "Shopee",
         debit: 209361,
         credit: 0,
       },
@@ -518,6 +706,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1109",
         accountName: "Saldo Penjual - Shopee topherbal.id",
         storeTag: "topherbal.id",
+        sourceChannel: "Shopee",
         debit: 1120229,
         credit: 0,
       },
@@ -526,6 +715,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1218",
         accountName: "PPh 22 Dibayar Dimuka",
         storeTag: "topherbal.id",
+        sourceChannel: "Shopee",
         debit: 6437,
         credit: 0,
       },
@@ -534,6 +724,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "4112",
         accountName: "Penjualan Marketplace",
         storeTag: "topherbal.id",
+        sourceChannel: "Shopee",
         debit: 0,
         credit: 1286613,
       },
@@ -542,6 +733,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5803",
         accountName: "Pendapatan Lain: Kompensasi Marketplace",
         storeTag: "topherbal.id",
+        sourceChannel: "Shopee",
         debit: 0,
         credit: 18032,
       },
@@ -550,6 +742,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5203",
         accountName: "Beban Fee & Promo Marketplace",
         storeTag: "topherbal.id",
+        sourceChannel: "Shopee",
         debit: 169188,
         credit: 0,
       },
@@ -557,10 +750,12 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
   },
   {
     id: "draft-3",
+    companyId: "comp-topherbal",
     title: "Settlement TikTok Topherbal Official 2026-11-22: 22 order",
     entryDate: "2026-11-22",
     sourceType: "Marketplace",
-    platformTag: "Marketplace",
+    sourceChannel: "TikTok",
+    platformTag: "TikTok",
     storeId: "store-tiktok-1",
     storeName: "Topherbal Official",
     status: "MENUNGGU",
@@ -573,6 +768,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1206",
         accountName: "Persediaan Barang Jadi",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 0,
         credit: 315684,
       },
@@ -581,6 +777,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "4201",
         accountName: "Retur Penjualan",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 146020,
         credit: 0,
       },
@@ -589,6 +786,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5101",
         accountName: "HPP Barang Jadi",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 315684,
         credit: 0,
       },
@@ -597,6 +795,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1106",
         accountName: "Saldo Penjual - TikTok Topherbal Official",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 1608053,
         credit: 0,
       },
@@ -605,6 +804,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1218",
         accountName: "PPh 22 Dibayar Dimuka",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 9865,
         credit: 0,
       },
@@ -613,6 +813,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "4112",
         accountName: "Penjualan Marketplace",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 0,
         credit: 1972943,
       },
@@ -621,6 +822,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5203",
         accountName: "Beban Fee & Promo Marketplace",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 209005,
         credit: 0,
       },
@@ -628,10 +830,12 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
   },
   {
     id: "draft-4",
+    companyId: "comp-topherbal",
     title: "Iklan TikTok GMV Max Topherbal Official 01/11/2026–23/11/2026: total 3.287.625 (termasuk PPN 11%), sudah dibukukan 2.915.957, selisih 371.668",
     entryDate: "2026-11-23",
     sourceType: "Iklan",
-    platformTag: "Marketplace",
+    sourceChannel: "TikTok",
+    platformTag: "TikTok",
     storeId: "store-tiktok-1",
     storeName: "Topherbal Official",
     status: "MENUNGGU",
@@ -643,6 +847,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5308",
         accountName: "Beban Iklan Marketplace",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 371668,
         credit: 0,
       },
@@ -651,6 +856,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "2112",
         accountName: "Utang Iklan TikTok (GMV Pay)",
         storeTag: "Topherbal Official",
+        sourceChannel: "TikTok",
         debit: 0,
         credit: 371668,
       },
@@ -658,11 +864,13 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
   },
   {
     id: "draft-5",
+    companyId: "comp-topherbal",
     title: "Selisih Settlement Shopee jamuku.official 2026-11-17: 5 order",
     entryDate: "2026-11-17",
     sourceType: "Marketplace",
-    platformTag: "Marketplace",
-    storeId: "store-shopee-2",
+    sourceChannel: "Shopee",
+    platformTag: "Shopee",
+    storeId: "store-shopee-1",
     storeName: "jamuku.official",
     status: "MENUNGGU",
     totalAmount: 1,
@@ -674,6 +882,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "1206",
         accountName: "Persediaan Barang Jadi",
         storeTag: "jamuku.official",
+        sourceChannel: "Shopee",
         debit: 0,
         credit: 1,
       },
@@ -682,6 +891,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         accountCode: "5101",
         accountName: "HPP Barang Jadi",
         storeTag: "jamuku.official",
+        sourceChannel: "Shopee",
         debit: 1,
         credit: 0,
       },
@@ -689,9 +899,11 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
   },
   {
     id: "draft-6",
+    companyId: "comp-topherbal",
     title: "Pembelian UD Kemasan Jaya nota INV-20261123-901: 2 item, total 3.427.500 (ongkir 60.000)",
     entryDate: "2026-11-23",
     sourceType: "Stok",
+    sourceChannel: "Operasional",
     platformTag: "AI (Gemini Pro)",
     status: "MENUNGGU",
     totalAmount: 3427500,
@@ -701,6 +913,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         id: "l-601",
         accountCode: "1214",
         accountName: "Persediaan Kemasan",
+        sourceChannel: "Operasional",
         debit: 3427500,
         credit: 0,
       },
@@ -708,6 +921,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         id: "l-602",
         accountCode: "1102",
         accountName: "BCA PT",
+        sourceChannel: "Operasional",
         debit: 0,
         credit: 3427500,
       },
@@ -715,9 +929,11 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
   },
   {
     id: "draft-7",
+    companyId: "comp-topherbal",
     title: "Gaji 2 staff gudang",
     entryDate: "2026-11-23",
     sourceType: "AI (Gemini Pro)",
+    sourceChannel: "Operasional",
     platformTag: "AI (Gemini Pro)",
     status: "MENUNGGU",
     totalAmount: 7600000,
@@ -727,6 +943,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         id: "l-701",
         accountCode: "5401",
         accountName: "By Gaji Karyawan",
+        sourceChannel: "Operasional",
         debit: 7600000,
         credit: 0,
       },
@@ -734,6 +951,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         id: "l-702",
         accountCode: "1102",
         accountName: "BCA PT",
+        sourceChannel: "Operasional",
         debit: 0,
         credit: 7600000,
       },
@@ -741,9 +959,11 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
   },
   {
     id: "draft-8",
+    companyId: "comp-topherbal",
     title: "Meta Ads November pekan 4",
     entryDate: "2026-11-23",
     sourceType: "AI (Gemini Pro)",
+    sourceChannel: "Operasional",
     platformTag: "AI (Gemini Pro)",
     status: "MENUNGGU",
     totalAmount: 1500000,
@@ -753,6 +973,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         id: "l-801",
         accountCode: "5301",
         accountName: "By Pemasaran META ADS",
+        sourceChannel: "Operasional",
         debit: 1500000,
         credit: 0,
       },
@@ -760,6 +981,7 @@ export const INITIAL_JOURNAL_DRAFTS: JournalEntry[] = [
         id: "l-802",
         accountCode: "1102",
         accountName: "BCA PT",
+        sourceChannel: "Operasional",
         debit: 0,
         credit: 1500000,
       },
@@ -801,6 +1023,10 @@ export const INITIAL_IMPORT_BATCHES: ImportBatch[] = [
     settlementCount: 18,
     mutationCount: 1,
     netDisbursed: 1243273,
+    grossSalesTotal: 1421578,
+    feeTotal: 171197,
+    pph22Total: 7108,
+    hppTotal: 233448,
     saved: true,
     draftGenerated: true,
   },
@@ -819,6 +1045,10 @@ export const INITIAL_IMPORT_BATCHES: ImportBatch[] = [
     settlementCount: 14,
     mutationCount: 0,
     netDisbursed: 1099531,
+    grossSalesTotal: 1286613,
+    feeTotal: 169188,
+    pph22Total: 6437,
+    hppTotal: 209361,
     saved: true,
     draftGenerated: true,
   },

@@ -12,9 +12,11 @@ import {
   CreditCard,
   Briefcase,
   Building2,
+  Filter,
+  Layers,
 } from "lucide-react";
 import { useAccounting } from "@/lib/accounting-context";
-import { formatIDR } from "@/lib/accounting-data";
+import { formatIDR, SourceChannel } from "@/lib/accounting-data";
 
 type ReportTab =
   | "NERACA"
@@ -24,8 +26,24 @@ type ReportTab =
   | "ARUS_KAS"
   | "BUKU_BESAR";
 
+const SOURCE_CHANNELS: { id: "ALL" | SourceChannel; label: string }[] = [
+  { id: "ALL", label: "Semua Sumber (Overall)" },
+  { id: "TikTok", label: "TikTok Shop" },
+  { id: "Shopee", label: "Shopee" },
+  { id: "Tokopedia", label: "Tokopedia" },
+  { id: "POS / Custom", label: "POS / Custom Excel" },
+  { id: "Operasional", label: "Operasional & Iklan Meta" },
+];
+
 export default function LaporanPage() {
-  const { accounts, summary } = useAccounting();
+  const {
+    activeCompany,
+    accounts,
+    summary,
+    selectedSourceFilter,
+    setSelectedSourceFilter,
+    sourceBreakdown,
+  } = useAccounting();
   const [activeTab, setActiveTab] = useState<ReportTab>("NERACA");
   const [periodMode, setPeriodMode] = useState("Bulan");
   const [selectedMonth, setSelectedMonth] = useState("November 2026");
@@ -59,7 +77,6 @@ export default function LaporanPage() {
     0
   );
 
-  // Forecast multiplier
   const mult =
     forecastScenario === "Rendah"
       ? 0.85
@@ -77,6 +94,23 @@ export default function LaporanPage() {
     adBudgetInput -
     fixedCostInput -
     projectedOrders * fulfillmentPerOrder;
+
+  const overallTotals = {
+    orderCount: sourceBreakdown.reduce((a, b) => a + b.orderCount, 0),
+    grossSales: sourceBreakdown.reduce((a, b) => a + b.grossSales, 0),
+    returns: sourceBreakdown.reduce((a, b) => a + b.returns, 0),
+    netSales: sourceBreakdown.reduce((a, b) => a + b.netSales, 0),
+    hpp: sourceBreakdown.reduce((a, b) => a + b.hpp, 0),
+    grossProfit: sourceBreakdown.reduce((a, b) => a + b.grossProfit, 0),
+    marketplaceFee: sourceBreakdown.reduce((a, b) => a + b.marketplaceFee, 0),
+    adExpense: sourceBreakdown.reduce((a, b) => a + b.adExpense, 0),
+    operatingExpense: sourceBreakdown.reduce(
+      (a, b) => a + b.operatingExpense,
+      0
+    ),
+    pph22TaxCredit: sourceBreakdown.reduce((a, b) => a + b.pph22TaxCredit, 0),
+    netProfit: sourceBreakdown.reduce((a, b) => a + b.netProfit, 0),
+  };
 
   return (
     <div className="space-y-5">
@@ -107,6 +141,45 @@ export default function LaporanPage() {
             </button>
           );
         })}
+      </div>
+
+      {/* Filter Kategori Sumber Data (Overall vs TikTok vs Shopee vs Tokopedia vs Custom) */}
+      <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-2xs space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-slate-800">
+            <Filter className="w-3.5 h-3.5 text-[#15803d]" />
+            <span>
+              Filter Kategori Sumber Data ({activeCompany.name}):
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-500">
+            Menampilkan:{" "}
+            <strong className="text-[#15803d]">
+              {selectedSourceFilter === "ALL"
+                ? "Overall Semua Sumber"
+                : `Khusus Sumber ${selectedSourceFilter}`}
+            </strong>
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {SOURCE_CHANNELS.map((ch) => {
+            const isSelected = selectedSourceFilter === ch.id;
+            return (
+              <button
+                key={ch.id}
+                onClick={() => setSelectedSourceFilter(ch.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer ${
+                  isSelected
+                    ? "bg-[#15803d] text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200/70"
+                }`}
+              >
+                {ch.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* KPI Traffic Light Pill Bar */}
@@ -166,7 +239,6 @@ export default function LaporanPage() {
       {/* TAB 1: NERACA matching video 0:33 - 0:42 & 1:01 - 1:08 */}
       {activeTab === "NERACA" && (
         <div className="space-y-4">
-          {/* 4 Summary Cards */}
           <div className="grid grid-cols-2 gap-3.5">
             <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
               <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
@@ -261,7 +333,6 @@ export default function LaporanPage() {
               </div>
             </div>
 
-            {/* Status Neraca Seimbang Highlight Card matching video 1:06 */}
             <div className="bg-white rounded-2xl p-4 border-2 border-amber-400 shadow-2xs flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
@@ -283,14 +354,37 @@ export default function LaporanPage() {
             </div>
           </div>
 
-          {/* Detailed Aktiva Table matching video 0:34 */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
             <div className="flex justify-between text-xs sm:text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">
-              <span>Subtotal Kas & Bank</span>
+              <span>Subtotal Kas & Bank (+ Saldo Wallet Marketplace)</span>
               <span className="font-mono">{formatIDR(subtotalCash)}</span>
             </div>
 
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pt-1">
+            <div className="divide-y divide-slate-100 text-xs">
+              {cashAccounts.map((acc) => (
+                <div
+                  key={acc.code}
+                  className="py-2 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-mono">
+                      {acc.code}
+                    </span>
+                    <span className="text-slate-700">{acc.name}</span>
+                    {acc.sourceChannel && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">
+                        {acc.sourceChannel}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-mono font-semibold">
+                    {formatIDR(acc.closingBalance)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pt-2">
               Piutang, Persediaan & Dibayar di Muka
             </div>
 
@@ -353,7 +447,6 @@ export default function LaporanPage() {
             </div>
           </div>
 
-          {/* Detailed Pasiva & Modal Table matching video 0:41 */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
             <h3 className="text-sm sm:text-base font-bold text-slate-900">
               Pasiva & Modal
@@ -372,6 +465,11 @@ export default function LaporanPage() {
                     {acc.code}
                   </span>
                   <span className="font-medium text-slate-800">{acc.name}</span>
+                  {acc.sourceChannel && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
+                      {acc.sourceChannel}
+                    </span>
+                  )}
                 </div>
                 <span className="font-mono font-semibold text-slate-900">
                   {formatIDR(acc.closingBalance)}
@@ -413,76 +511,188 @@ export default function LaporanPage() {
         </div>
       )}
 
-      {/* TAB 2: LABA RUGI matching video 1:03 */}
+      {/* TAB 2: LABA RUGI matching video 1:03 + Source Channel Breakdown Table */}
       {activeTab === "LABA_RUGI" && (
-        <div className="grid grid-cols-2 gap-3.5">
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
-            <div className="text-xs font-medium text-slate-600">Pendapatan</div>
-            <div className="text-base sm:text-xl font-bold text-slate-900">
-              {formatIDR(summary.netSales)}
-            </div>
-            <div className="text-[11px] text-slate-400">
-              Penjualan bersih · periode pilihan
-            </div>
-            <div className="pt-2 border-t border-slate-100 text-[11px] space-y-1 font-mono">
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-sans">Awal</span>
-                <span>Rp86.793.173</span>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3.5">
+            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
+              <div className="text-xs font-medium text-slate-600">
+                Pendapatan{" "}
+                {selectedSourceFilter !== "ALL"
+                  ? `(${selectedSourceFilter})`
+                  : "(Overall)"}
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-sans">Berjalan</span>
-                <span>{formatIDR(summary.netSales)}</span>
+              <div className="text-base sm:text-xl font-bold text-slate-900">
+                {formatIDR(summary.netSales)}
               </div>
-              <div className="flex justify-between font-bold">
-                <span className="text-slate-400 font-sans">Akhir</span>
-                <span>{formatIDR(86793173 + summary.netSales)}</span>
+              <div className="text-[11px] text-slate-400">
+                Penjualan bersih · setelah retur
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
+              <div className="text-xs font-medium text-slate-600">
+                Laba Kotor{" "}
+                {selectedSourceFilter !== "ALL"
+                  ? `(${selectedSourceFilter})`
+                  : "(Overall)"}
+              </div>
+              <div className="text-base sm:text-xl font-bold text-slate-900">
+                {formatIDR(summary.grossProfit)}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Setelah HPP {formatIDR(summary.totalHpp)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
+              <div className="text-xs font-medium text-slate-600">
+                Beban & Komisi{" "}
+                {selectedSourceFilter !== "ALL"
+                  ? `(${selectedSourceFilter})`
+                  : "(Overall)"}
+              </div>
+              <div className="text-base sm:text-xl font-bold text-slate-900">
+                {formatIDR(summary.totalOperatingExpense)}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Di luar HPP · Fee, Iklan & Operasional
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-emerald-300 shadow-2xs space-y-2">
+              <div className="text-xs font-medium text-emerald-800">
+                Laba (Rugi) Bersih{" "}
+                {selectedSourceFilter !== "ALL"
+                  ? `(${selectedSourceFilter})`
+                  : "(Overall)"}
+              </div>
+              <div className="text-base sm:text-xl font-bold text-[#15803d]">
+                {formatIDR(summary.netIncome)}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Kredit Pajak PPh 22: {formatIDR(summary.pph22Prepaid)}
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
-            <div className="text-xs font-medium text-slate-600">Laba Kotor</div>
-            <div className="text-base sm:text-xl font-bold text-slate-900">
-              {formatIDR(summary.grossProfit)}
-            </div>
-            <div className="text-[11px] text-slate-400">
-              Setelah HPP {formatIDR(summary.totalHpp)}
-            </div>
-            <div className="pt-2 border-t border-slate-100 text-[11px] space-y-1 font-mono">
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-sans">Awal</span>
-                <span>Rp72.767.917</span>
+          {/* Complete Multi-Source Breakdown Matrix (TikTok vs Shopee vs Tokopedia vs Custom vs Overall) */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#15803d]" />
+                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                  Rincian Laba Rugi, HPP & Pajak per Sumber Data + Overall
+                </h3>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-sans">Berjalan</span>
-                <span>{formatIDR(summary.grossProfit)}</span>
-              </div>
-              <div className="flex justify-between font-bold">
-                <span className="text-slate-400 font-sans">Akhir</span>
-                <span>{formatIDR(72767917 + summary.grossProfit)}</span>
-              </div>
+              <span className="text-xs text-slate-500">
+                Klik baris untuk memfilter
+              </span>
             </div>
-          </div>
 
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
-            <div className="text-xs font-medium text-slate-600">Beban</div>
-            <div className="text-base sm:text-xl font-bold text-slate-900">
-              {formatIDR(summary.totalOperatingExpense)}
-            </div>
-            <div className="text-[11px] text-slate-400">
-              Di luar HPP · periode pilihan
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 border border-emerald-300 shadow-2xs space-y-2">
-            <div className="text-xs font-medium text-emerald-800">
-              Laba (Rugi) Bersih
-            </div>
-            <div className="text-base sm:text-xl font-bold text-[#15803d]">
-              {formatIDR(summary.netIncome)}
-            </div>
-            <div className="text-[11px] text-slate-400">
-              Pendapatan − HPP − beban
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 uppercase text-[11px]">
+                    <th className="py-2 pr-2">Kategori Sumber Data</th>
+                    <th className="py-2 px-2 text-right">Omzet Bruto</th>
+                    <th className="py-2 px-2 text-right">Retur</th>
+                    <th className="py-2 px-2 text-right">Penjualan Bersih</th>
+                    <th className="py-2 px-2 text-right">HPP (5101)</th>
+                    <th className="py-2 px-2 text-right">Fee & Iklan</th>
+                    <th className="py-2 px-2 text-right">PPh 22 (1218)</th>
+                    <th className="py-2 pl-2 text-right">Laba Bersih</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sourceBreakdown.map((row) => (
+                    <tr
+                      key={row.channel}
+                      onClick={() => setSelectedSourceFilter(row.channel)}
+                      className={`cursor-pointer transition-colors ${
+                        selectedSourceFilter === row.channel
+                          ? "bg-emerald-50 font-semibold"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <td className="py-2.5 pr-2 font-bold text-slate-900">
+                        {row.channel}{" "}
+                        {row.orderCount > 0 && (
+                          <span className="text-[11px] font-normal text-slate-400">
+                            ({row.orderCount} order)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono">
+                        {formatIDR(row.grossSales)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono text-rose-600">
+                        {formatIDR(row.returns)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono font-medium">
+                        {formatIDR(row.netSales)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono text-slate-700">
+                        {formatIDR(row.hpp)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono text-slate-600">
+                        {formatIDR(
+                          row.marketplaceFee +
+                            row.adExpense +
+                            row.operatingExpense
+                        )}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono text-amber-800 font-semibold">
+                        {formatIDR(row.pph22TaxCredit)}
+                      </td>
+                      <td
+                        className={`py-2.5 pl-2 text-right font-mono font-bold ${
+                          row.netProfit >= 0
+                            ? "text-[#15803d]"
+                            : "text-rose-600"
+                        }`}
+                      >
+                        {formatIDR(row.netProfit)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr
+                    onClick={() => setSelectedSourceFilter("ALL")}
+                    className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-900 cursor-pointer"
+                  >
+                    <td className="py-3 pr-2">
+                      TOTAL OVERALL ({overallTotals.orderCount} order)
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono">
+                      {formatIDR(overallTotals.grossSales)}
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono text-rose-600">
+                      {formatIDR(overallTotals.returns)}
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono">
+                      {formatIDR(overallTotals.netSales)}
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono">
+                      {formatIDR(overallTotals.hpp)}
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono">
+                      {formatIDR(
+                        overallTotals.marketplaceFee +
+                          overallTotals.adExpense +
+                          overallTotals.operatingExpense
+                      )}
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono text-amber-800">
+                      {formatIDR(overallTotals.pph22TaxCredit)}
+                    </td>
+                    <td className="py-3 pl-2 text-right font-mono text-[#15803d]">
+                      {formatIDR(overallTotals.netProfit)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>
@@ -739,7 +949,8 @@ export default function LaporanPage() {
       {activeTab === "BUKU_BESAR" && (
         <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
           <h3 className="text-sm sm:text-base font-bold text-slate-900">
-            Buku Besar (Chart of Accounts & Saldo Berjalan)
+            Buku Besar (Chart of Accounts & Saldo Berjalan ·{" "}
+            {activeCompany.name})
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
@@ -747,6 +958,7 @@ export default function LaporanPage() {
                 <tr className="border-b border-slate-200 text-slate-400 uppercase text-[11px]">
                   <th className="py-2 pr-2">Kode</th>
                   <th className="py-2 px-2">Nama Akun</th>
+                  <th className="py-2 px-2">Sumber</th>
                   <th className="py-2 px-2 text-right">Saldo Awal</th>
                   <th className="py-2 px-2 text-right">Mutasi</th>
                   <th className="py-2 pl-2 text-right">Saldo Akhir</th>
@@ -760,6 +972,11 @@ export default function LaporanPage() {
                     </td>
                     <td className="py-2.5 px-2 font-medium text-slate-900">
                       {acc.name}
+                    </td>
+                    <td className="py-2.5 px-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                        {acc.sourceChannel || "Overall"}
+                      </span>
                     </td>
                     <td className="py-2.5 px-2 text-right font-mono text-slate-500">
                       {formatIDR(acc.openingBalance)}
