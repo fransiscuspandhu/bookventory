@@ -8,37 +8,35 @@ Dokumen ini berisi rencana kerja teknis (*step-by-step*) untuk membangun **Bookv
 
 ```mermaid
 flowchart LR
-    M1["Fase 1: VPS & Docker Setup +\nCore Double-Entry Ledger\n(Minggu 1-2)"]
+    M1["Fase 1: Web UI Preview &\nCore Double-Entry Ledger\n(Minggu 1-2)"]
     M2["Fase 2: Smart Import Excel/CSV\n& Google Drive Sync\n(Minggu 3-4)"]
     M3["Fase 3: Inventory BOM, Laporan\nKeuangan & Forecast\n(Minggu 5-6)"]
-    M4["Fase 4: Instalasi OpenClaw / Hermes\n(WA, Telegram & Gemini Pro)\n(Minggu 7-8)"]
+    M4["Fase 4: AI Assistant, Setup VPS &\nOpenClaw / Hermes (WA & TG)\n(Minggu 7-8)"]
 
     M1 --> M2 --> M3 --> M4
 ```
 
-### Peta Posisi Instalasi per Fase (Masuk ke Fase Berapa?)
+### Peta Posisi Development vs Instalasi VPS (Web Preview First)
 
-Detail teknis perintah instalasi terdapat di [**docs/04-installation-and-setup-guide.md**](./04-installation-and-setup-guide.md), dan dieksekusi pada fase berikut:
+Agar kita bisa langsung **melihat dan menguji coba (preview) tampilan website sejak langkah paling awal**, seluruh proses instalasi VPS, Docker, dan Chat Gateway ditaruh di **Fase 4** (saat mengimplementasikan AI Assistant & integrasi WhatsApp/Telegram):
 
-| Komponen Instalasi | Masuk ke Fase | Detail Langkah di Work Plan |
+| Tahapan | Masuk ke Fase | Fokus Utama |
 | :--- | :--- | :--- |
-| **1. Setup VPS, Docker, PostgreSQL & Next.js App** | **Fase 1** (`Step 1.1 & 1.2`) | Instalasi Docker Compose, database PostgreSQL, migrasi tabel, & *seeding* Chart of Accounts (COA) di VPS. |
-| **2. Setup File Storage & Google Drive API** | **Fase 2** (`Step 2.4`) | Konfigurasi folder upload Excel/CSV & kredensial Google Drive Watch Folder di `.env` VPS. |
-| **3. Instalasi OpenClaw / Hermes Agent + Gemini Pro** | **Fase 4** (`Step 4.2`) *(Bisa juga dimajukan ke akhir Fase 2 jika ingin tes upload Excel via WA/Telegram lebih awal)* | Instalasi CLI `openclaw` atau `hermes-agent` di VPS, login model **Gemini 2.5 Pro/Flash**, scan QR WhatsApp, input token BotFather Telegram, dan pasang `bookventory-skill`. |
+| **1. Web App Preview & Core Accounting UI** | **Fase 1** (`Step 1.1 – 1.3`) | Fokus 100% membangun aplikasi Next.js (`Dashboard`, `Import`, `Antrian`, `Stok`, `Laporan`, `Performa Toko`) yang langsung bisa di-**preview di browser** menggunakan local database (SQLite / Local Postgres) tanpa perlu urus VPS dulu. |
+| **2. Smart File Parser (Excel/CSV) & GDrive** | **Fase 2** (`Step 2.1 – 2.4`) | Upload & parsing file laporan Shopee/TikTok/Excel langsung di Web Preview hingga menjadi Draft Jurnal (lengkap dengan HPP & PPh 22). |
+| **3. Modul Stok Gudang (BOM) & Laporan Keuangan** | **Fase 3** (`Step 3.1 – 3.3`) | Menyelesaikan kalkulasi HPP otomatis, Neraca Seimbang, Laba Rugi, Arus Kas, Performa Toko, KPI, dan Forecast di Web Preview. |
+| **4. Setup VPS, Docker & Integrasi OpenClaw / Hermes + Gemini Pro** | **Fase 4** (`Step 4.1 – 4.3`) | Setelah website matang di preview: bangun fitur **AI Assistant**, deploy aplikasi & PostgreSQL ke **VPS Anda**, lalu install **OpenClaw / Hermes Agent** (scan QR WhatsApp, Telegram Bot, & Gemini Pro). |
 
 ---
 
-## Fase 1: Foundation, VPS Setup, Database Schema & Double-Entry Engine (Minggu 1–2)
+## Fase 1: Web UI Preview, Database Schema & Double-Entry Engine (Minggu 1–2)
 
-Tujuan Fase 1 adalah menyiapkan environment VPS (Docker + PostgreSQL) serta membangun fondasi akuntansi *double-entry* yang presisi (`Debit = Kredit`), Chart of Accounts (COA), halaman **Antrian Draft Jurnal**, dan **Dashboard Ringkasan**.
+Tujuan Fase 1 adalah menghadirkan **Live Web Preview** dari seluruh halaman utama beserta fondasi akuntansi *double-entry* yang presisi (`Debit = Kredit`), Chart of Accounts (COA), halaman **Antrian Draft Jurnal**, dan **Dashboard Ringkasan**.
 
-### Step 1.1: VPS Environment, Docker Compose & Project Scaffolding
-- [ ] **Setup VPS & Docker (Tahap 1 & 2 di [Panduan Instalasi](./04-installation-and-setup-guide.md)):**
-  - Install Docker, Docker Compose, dan Node.js 22 LTS (`pnpm`) di VPS Ubuntu.
-  - Buat `docker-compose.yml` untuk menjalankan container `postgres:16-alpine` dan aplikasi `bookventory-web`.
-- [ ] Inisialisasi project **Next.js (App Router, TypeScript)** dengan **Tailwind CSS** dan **Shadcn UI**.
+### Step 1.1: Project Scaffolding & Interactive Web UI Preview
+- [ ] Inisialisasi project **Next.js (App Router, TypeScript)** dengan **Tailwind CSS** dan **Shadcn UI** yang langsung berjalan di *development preview server*.
 - [ ] Konfigurasi `decimal.js` untuk seluruh operasi aritmatika keuangan di sisi aplikasi.
-- [ ] Membangun *App Shell* & Navigasi responsif (Mobile & Desktop) dengan tema warna hijau zamrud (*emerald green*) bersih sesuai referensi:
+- [ ] Membangun *App Shell* & Navigasi responsif (Mobile & Desktop) dengan tema warna hijau zamrud (*emerald green*) bersih sesuai video referensi agar bisa langsung di-preview:
   - Topbar: Drawer Menu, Judul Halaman, Quick Search, Tombol `+` (Quick Action), Notifikasi.
   - Halaman utama: `Dashboard`, `Import`, `Antrian`, `Stok Gudang`, `Laporan`, `Performa Toko`, `Asisten AI`.
 
@@ -129,9 +127,9 @@ Tujuan Fase 3 adalah memastikan nilai HPP dan Persediaan di Neraca selalu akurat
 
 ---
 
-## Fase 4: AI Assistant & Instalasi OpenClaw / Hermes Agent di VPS (Minggu 7–8)
+## Fase 4: AI Assistant, Deployment VPS & Integrasi OpenClaw / Hermes Agent (Minggu 7–8)
 
-Tujuan Fase 4 adalah memungkinkan pencatatan transaksi, upload file laporan/nota, dan pengecekan laporan keuangan langsung dari ruang chat (Telegram & WhatsApp) menggunakan **OpenClaw** atau **Hermes Agent** yang di-deploy di VPS yang sama (Lihat detail perintah di [**Tahap 3 & 4 Panduan Instalasi**](./04-installation-and-setup-guide.md)).
+Tujuan Fase 4 adalah menyelesaikan fitur **In-App AI Assistant**, lalu melakukan **Deployment ke VPS Anda** (Docker Compose + PostgreSQL) dan menghubungkannya dengan **OpenClaw** atau **Hermes Agent** untuk integrasi WhatsApp & Telegram (Lihat detail perintah di [**Panduan Instalasi VPS**](./04-installation-and-setup-guide.md)).
 
 ### Step 4.1: In-App AI Assistant & Bookventory API / MCP Tools (`/asisten-ai`)
 - [ ] Bangun antarmuka chat AI di web sekaligus ekspos **Bookventory Agent Tools (REST API `/api/agent/*` & MCP Server)** agar bisa dipanggil oleh In-App Chat, **OpenClaw**, maupun **Hermes Agent**:
@@ -141,8 +139,14 @@ Tujuan Fase 4 adalah memungkinkan pencatatan transaksi, upload file laporan/nota
   4. `POST /api/agent/approve` (`approve_pending_drafts`): Menyetujui draft jurnal langsung dari perintah chat.
   5. `GET /api/agent/reports/summary` (`query_financial_summary`): Menjawab pertanyaan analitik (*"Berapa laba bersih dan kredit pajak PPh 22 bulan ini?"*, *"Toko mana yang ROAS-nya tertinggi?"*) langsung dari `JournalEngine`.
 
-### Step 4.2: Instalasi OpenClaw atau Hermes Agent di VPS (Telegram & WhatsApp)
-Kita dapat memilih salah satu (atau keduanya) karena sama-sama berjalan secara *self-hosted* di VPS Anda:
+### Step 4.2: Setup VPS, Docker Compose & Production PostgreSQL
+- [ ] Setelah seluruh fitur Web UI & AI Assistant terverifikasi di preview, siapkan VPS Ubuntu Anda ([Tahap 1 & 2 di Panduan Instalasi](./04-installation-and-setup-guide.md)):
+  - Install Docker, Docker Compose, dan Node.js 22 LTS (`pnpm`).
+  - Jalankan `docker compose up -d` untuk menyalakan `postgres:16-alpine` dan `bookventory-web` di VPS.
+  - Jalankan `pnpm db:push && pnpm db:seed` untuk migrasi skema & *seeding* COA produksi.
+
+### Step 4.3: Instalasi OpenClaw atau Hermes Agent di VPS (Telegram & WhatsApp)
+Kita dapat memilih salah satu (atau keduanya) karena sama-sama berjalan secara *self-hosted* di VPS Anda ([Tahap 3 & 4 di Panduan Instalasi](./04-installation-and-setup-guide.md)):
 - [ ] **Opsi A — Instalasi OpenClaw (`openclaw`):**
   1. `npm install -g openclaw && openclaw onboard` (Pilih model **Google Gemini 2.5 Pro/Flash**).
   2. Hubungkan Telegram: `openclaw channels add --channel telegram --token "<BOT_TOKEN>"`.
