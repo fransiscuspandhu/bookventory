@@ -72,7 +72,18 @@ interface AccountingContextType {
     draft: Omit<JournalEntry, "id" | "createdAt" | "status">
   ) => JournalEntry;
   addParsedImportBatches: (parsedFiles: RealParsedFileResult[]) => void;
-  generateDraftsFromImports: (storeFilter: string) => number;
+  generateDraftsFromImports: (storeFilter: string) => {
+    createdCount: number;
+    discrepancyDraftCount: number;
+    skippedCount: number;
+    generatedTableRows: {
+      tanggal: string;
+      jenis: string;
+      jml: number;
+      totalDebit: number;
+      storeName: string;
+    }[];
+  };
   recordStockPurchase: (params: {
     date: string;
     invoiceNo: string;
@@ -405,26 +416,26 @@ export function AccountingProvider({
     setImportBatches((prev) => [...newBatches, ...prev]);
   };
 
-  const generateDraftsFromImports = (storeFilter: string): number => {
-    const pendingBatches = importBatches.filter(
-      (b) =>
-        !b.draftGenerated &&
-        (storeFilter === "ALL" || b.storeId === storeFilter)
+  const generateDraftsFromImports = (storeFilter: string) => {
+    const targetBatches = importBatches.filter(
+      (b) => storeFilter === "ALL" || b.storeId === storeFilter
     );
 
     let createdCount = 0;
-    for (const batch of pendingBatches) {
-      const grossSales =
-        batch.grossSalesTotal ||
-        (batch.netDisbursed > 0
-          ? Math.round(batch.netDisbursed * 1.15)
-          : 1455000);
-      const pph22 = batch.pph22Total || Math.round(grossSales * 0.005);
-      const fee =
-        batch.feeTotal ||
-        Math.max(0, grossSales - (batch.netDisbursed || 1273850) - pph22);
-      const netWallet = grossSales - fee - pph22;
-      const hpp = batch.hppTotal || Math.round(grossSales * 0.165);
+    let discrepancyDraftCount = 0;
+    let skippedCount = 0;
+    const generatedTableRows: {
+      tanggal: string;
+      jenis: string;
+      jml: number;
+      totalDebit: number;
+      storeName: string;
+    }[] = [];
+
+    for (const batch of targetBatches) {
+      if (batch.draftGenerated) {
+        skippedCount++;
+      }
 
       const walletCode =
         batch.platform === "TikTok"
@@ -438,84 +449,223 @@ export function AccountingProvider({
           : batch.platform === "Shopee"
           ? "Saldo Penjual - Shopee topherbal.id"
           : "BCA PT";
-
       const ch: SourceChannel = batch.platform;
 
-      const lines: JournalLine[] = [
-        {
-          id: `l-${Date.now()}-1`,
-          accountCode: "1206",
-          accountName: "Persediaan Barang Jadi",
-          storeTag: batch.storeName,
-          sourceChannel: ch,
-          debit: 0,
-          credit: hpp,
-        },
-        {
-          id: `l-${Date.now()}-2`,
-          accountCode: "5101",
-          accountName: "HPP Barang Jadi",
-          storeTag: batch.storeName,
-          sourceChannel: ch,
-          debit: hpp,
-          credit: 0,
-        },
-        {
-          id: `l-${Date.now()}-3`,
-          accountCode: walletCode,
-          accountName: walletName,
-          storeTag: batch.storeName,
-          sourceChannel: ch,
-          debit: netWallet,
-          credit: 0,
-        },
-        {
-          id: `l-${Date.now()}-4`,
-          accountCode: "1218",
-          accountName: "PPh 22 Dibayar Dimuka",
-          storeTag: batch.storeName,
-          sourceChannel: ch,
-          debit: pph22,
-          credit: 0,
-        },
-        {
-          id: `l-${Date.now()}-5`,
-          accountCode: "4112",
-          accountName: "Penjualan Marketplace",
-          storeTag: batch.storeName,
-          sourceChannel: ch,
-          debit: 0,
-          credit: grossSales,
-        },
-      ];
+      // Group rows by settlementDate (Satu draft per toko per tanggal cair!)
+      const rows =
+        batch.parsedRows && batch.parsedRows.length > 0
+          ? batch.parsedRows
+          : [
+              {
+                orderId: `ORD-${batch.id}-1`,
+                settlementDate: "2026-11-23",
+                sku: "JHM",
+                qty: 5,
+                grossSales: Math.round((batch.grossSalesTotal || 1421578) * 0.35),
+                returnAmount: 0,
+                marketplaceFee: Math.round((batch.feeTotal || 171197) * 0.35),
+                pph22Withheld: Math.round((batch.pph22Total || 7108) * 0.35),
+                adDeduction: 0,
+                netSettlement:
+                  Math.round((batch.grossSalesTotal || 1421578) * 0.35) -
+                  Math.round((batch.feeTotal || 171197) * 0.35) -
+                  Math.round((batch.pph22Total || 7108) * 0.35),
+                hppPerUnit: 12969,
+                totalHpp: Math.round((batch.hppTotal || 233448) * 0.35),
+              },
+              {
+                orderId: `ORD-${batch.id}-2`,
+                settlementDate: "2026-11-24",
+                sku: "KNY",
+                qty: 11,
+                grossSales:
+                  (batch.grossSalesTotal || 1421578) -
+                  Math.round((batch.grossSalesTotal || 1421578) * 0.35),
+                returnAmount: 0,
+                marketplaceFee:
+                  (batch.feeTotal || 171197) -
+                  Math.round((batch.feeTotal || 171197) * 0.35),
+                pph22Withheld:
+                  (batch.pph22Total || 7108) -
+                  Math.round((batch.pph22Total || 7108) * 0.35),
+                adDeduction: 0,
+                netSettlement:
+                  (batch.grossSalesTotal || 1421578) -
+                  Math.round((batch.grossSalesTotal || 1421578) * 0.35) -
+                  ((batch.feeTotal || 171197) -
+                    Math.round((batch.feeTotal || 171197) * 0.35)) -
+                  ((batch.pph22Total || 7108) -
+                    Math.round((batch.pph22Total || 7108) * 0.35)) -
+                  1, // Intentional Rp 1 discrepancy to demonstrate automatic Selisih draft
+                hppPerUnit: 11850,
+                totalHpp:
+                  (batch.hppTotal || 233448) -
+                  Math.round((batch.hppTotal || 233448) * 0.35),
+              },
+            ];
 
-      if (fee > 0) {
-        lines.push({
-          id: `l-${Date.now()}-6`,
-          accountCode: "5203",
-          accountName: "Beban Fee & Promo Marketplace",
-          storeTag: batch.storeName,
-          sourceChannel: ch,
-          debit: fee,
-          credit: 0,
-        });
+      const byDate = new Map<string, typeof rows>();
+      for (const r of rows) {
+        const d = r.settlementDate || "2026-11-24";
+        const arr = byDate.get(d) || [];
+        arr.push(r);
+        byDate.set(d, arr);
       }
 
-      addDraftJournal({
-        title: `Settlement ${batch.platform} ${batch.storeName} 2026-11-25: ${
-          batch.settlementCount || batch.orderCount || 15
-        } order (dari ${batch.fileName})`,
-        entryDate: "2026-11-25",
-        sourceType: "Marketplace",
-        sourceChannel: ch,
-        platformTag: batch.platform,
-        storeId: batch.storeId,
-        storeName: batch.storeName,
-        totalAmount: grossSales + hpp,
-        orderCount: batch.settlementCount || batch.orderCount || 15,
-        lines,
-      });
-      createdCount++;
+      for (const [dateStr, dateRows] of byDate.entries()) {
+        const grossSales = dateRows.reduce((a, b) => a + b.grossSales, 0);
+        const returnAmt = dateRows.reduce((a, b) => a + b.returnAmount, 0);
+        const feeAmt = dateRows.reduce((a, b) => a + b.marketplaceFee, 0);
+        const pph22Amt = dateRows.reduce((a, b) => a + b.pph22Withheld, 0);
+        const hppAmt = dateRows.reduce((a, b) => a + b.totalHpp, 0);
+        const actualNet = dateRows.reduce((a, b) => a + b.netSettlement, 0);
+        const expectedNet = grossSales - returnAmt - feeAmt - pph22Amt;
+        const diffRp = Math.abs(expectedNet - actualNet);
+
+        // Balance the main settlement journal cleanly
+        const balancedWalletDebit = expectedNet;
+        const totalDebit = grossSales + hppAmt;
+
+        generatedTableRows.push({
+          tanggal: dateStr,
+          jenis: "Settlement",
+          jml: dateRows.length,
+          totalDebit,
+          storeName: batch.storeName,
+        });
+
+        if (!batch.draftGenerated) {
+          const lines: JournalLine[] = [
+            {
+              id: `l-${Date.now()}-${dateStr}-1`,
+              accountCode: "1206",
+              accountName: "Persediaan Barang Jadi",
+              storeTag: batch.storeName,
+              sourceChannel: ch,
+              debit: 0,
+              credit: hppAmt,
+            },
+            {
+              id: `l-${Date.now()}-${dateStr}-2`,
+              accountCode: "5101",
+              accountName: "HPP Barang Jadi",
+              storeTag: batch.storeName,
+              sourceChannel: ch,
+              debit: hppAmt,
+              credit: 0,
+            },
+            {
+              id: `l-${Date.now()}-${dateStr}-3`,
+              accountCode: walletCode,
+              accountName: walletName,
+              storeTag: batch.storeName,
+              sourceChannel: ch,
+              debit: balancedWalletDebit,
+              credit: 0,
+            },
+            {
+              id: `l-${Date.now()}-${dateStr}-4`,
+              accountCode: "1218",
+              accountName: "PPh 22 Dibayar Dimuka",
+              storeTag: batch.storeName,
+              sourceChannel: ch,
+              debit: pph22Amt,
+              credit: 0,
+            },
+            {
+              id: `l-${Date.now()}-${dateStr}-5`,
+              accountCode: "4112",
+              accountName: "Penjualan Marketplace",
+              storeTag: batch.storeName,
+              sourceChannel: ch,
+              debit: 0,
+              credit: grossSales,
+            },
+          ];
+
+          if (returnAmt > 0) {
+            lines.push({
+              id: `l-${Date.now()}-${dateStr}-ret`,
+              accountCode: "4201",
+              accountName: "Retur Penjualan",
+              storeTag: batch.storeName,
+              sourceChannel: ch,
+              debit: returnAmt,
+              credit: 0,
+            });
+          }
+
+          if (feeAmt > 0) {
+            lines.push({
+              id: `l-${Date.now()}-${dateStr}-fee`,
+              accountCode: "5203",
+              accountName: "Beban Fee & Promo Marketplace",
+              storeTag: batch.storeName,
+              sourceChannel: ch,
+              debit: feeAmt,
+              credit: 0,
+            });
+          }
+
+          addDraftJournal({
+            title: `Settlement ${batch.platform} ${batch.storeName} ${dateStr}: ${dateRows.length} order`,
+            entryDate: dateStr,
+            sourceType: "Marketplace",
+            sourceChannel: ch,
+            platformTag: batch.platform,
+            storeId: batch.storeId,
+            storeName: batch.storeName,
+            totalAmount: totalDebit,
+            orderCount: dateRows.length,
+            lines,
+          });
+          createdCount++;
+
+          // Step 2.2: Automatic Rp 1 Discrepancy Draft Generator (Selisih Settlement)
+          if (diffRp > 0 && diffRp <= 5000) {
+            discrepancyDraftCount++;
+            generatedTableRows.push({
+              tanggal: dateStr,
+              jenis: "Selisih",
+              jml: dateRows.length,
+              totalDebit: diffRp,
+              storeName: batch.storeName,
+            });
+
+            addDraftJournal({
+              title: `Selisih Settlement ${batch.platform} ${batch.storeName} ${dateStr}: ${dateRows.length} order`,
+              entryDate: dateStr,
+              sourceType: "Marketplace",
+              sourceChannel: ch,
+              platformTag: batch.platform,
+              storeId: batch.storeId,
+              storeName: batch.storeName,
+              totalAmount: diffRp,
+              orderCount: dateRows.length,
+              lines: [
+                {
+                  id: `l-sel-${Date.now()}-1`,
+                  accountCode: "1206",
+                  accountName: "Persediaan Barang Jadi",
+                  storeTag: batch.storeName,
+                  sourceChannel: ch,
+                  debit: 0,
+                  credit: diffRp,
+                },
+                {
+                  id: `l-sel-${Date.now()}-2`,
+                  accountCode: "5101",
+                  accountName: "HPP Barang Jadi",
+                  storeTag: batch.storeName,
+                  sourceChannel: ch,
+                  debit: diffRp,
+                  credit: 0,
+                },
+              ],
+            });
+          }
+        }
+      }
     }
 
     setImportBatches((prev) =>
@@ -527,7 +677,12 @@ export function AccountingProvider({
       )
     );
 
-    return createdCount;
+    return {
+      createdCount,
+      discrepancyDraftCount,
+      skippedCount,
+      generatedTableRows,
+    };
   };
 
   const recordStockPurchase = (params: {
